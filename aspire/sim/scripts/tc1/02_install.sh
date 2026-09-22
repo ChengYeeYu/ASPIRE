@@ -29,7 +29,7 @@ export TMPDIR="$HOME/tmp"; mkdir -p "$TMPDIR"
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
-source "$HOME/.local/bin/env"
+export PATH="$HOME/.local/bin:$PATH"   # newer uv installers skip writing .local/bin/env
 uv --version
 
 bash scripts/common/apply_contact_graspnet_patch.sh
