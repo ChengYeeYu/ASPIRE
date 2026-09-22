@@ -20,10 +20,12 @@ export CUDA_HOME="${CUDA_HOME:-$(dirname "$(dirname "$(command -v nvcc)")")}"
 cd "$HOME/ASPIRE/aspire/sim"
 export ASPIRE_ROOT="$PWD"
 export PYTHON_ROOT="$(cd ../.. && pwd)"
-# keep every cache on the 300 GB home, never /tmp
-export UV_CACHE_DIR="$HOME/.cache/uv"
-export HF_HOME="$HOME/.cache/huggingface"
-export TMPDIR="$HOME/tmp"; mkdir -p "$TMPDIR"
+# home is NFS with local_lock=none, and uv must flock its cache -> cache + tmp go on the
+# node's local /tmp (1.5 TB, wiped between jobs; only re-downloads). Venvs stay in home.
+export UV_CACHE_DIR="/tmp/$USER/uv"
+export UV_LINK_MODE=copy            # cache and venv are on different filesystems
+export TMPDIR="/tmp/$USER/tmp"; mkdir -p "$UV_CACHE_DIR" "$TMPDIR"
+export HF_HOME="$HOME/.cache/huggingface"   # model weights: keep in home (no locking needed)
 
 # uv (user-space, no sudo)
 if ! command -v uv >/dev/null 2>&1; then
@@ -59,5 +61,5 @@ echo "== verify"
 .venv-libero/bin/python3 -c "import libero, robosuite, sam3, contact_graspnet_pytorch; print('libero env ok')"
 .venv/bin/python3 -c "import importlib.util; print('libero in base env (want None):', importlib.util.find_spec('libero'))"
 .venv-libero/bin/python3 -c "import torch; print('torch', torch.__version__, 'cuda build', torch.version.cuda)"
-du -sh .venv .venv-libero "$UV_CACHE_DIR"
+du -sh .venv .venv-libero
 echo "== INSTALL DONE. Next (on head node): .venv-libero/bin/hf auth login"

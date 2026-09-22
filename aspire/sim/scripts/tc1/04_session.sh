@@ -18,7 +18,7 @@ cd "$HOME/ASPIRE/aspire/sim"
 export ASPIRE_ROOT="$PWD"
 export PYTHON_ROOT="$(cd ../.. && pwd)"
 export HF_HOME="$HOME/.cache/huggingface"
-export UV_CACHE_DIR="$HOME/.cache/uv"
+export UV_CACHE_DIR="/tmp/$USER/uv" UV_LINK_MODE=copy   # NFS home has no file locking
 export MUJOCO_GL=egl
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 export PATH="$HOME/.local/bin:$PATH"       # uv + claude live here
