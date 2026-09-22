@@ -11,7 +11,11 @@
 #SBATCH --error=logs/error_%x_%j.err
 
 set -euxo pipefail
-module load cuda/12.6 gcc/13.3.0
+module load cuda/12.6
+# system gcc 11.5 is a supported nvcc-12.6 host compiler; no gcc module needed (only 13.1/13.4 exist here)
+# no GPU in this job, so tell torch's extension builder which arch to compile for (V100 = sm_70)
+export TORCH_CUDA_ARCH_LIST="7.0"
+export CUDA_HOME="${CUDA_HOME:-$(dirname "$(dirname "$(command -v nvcc)")")}"
 
 cd "$HOME/ASPIRE/aspire/sim"
 export ASPIRE_ROOT="$PWD"
