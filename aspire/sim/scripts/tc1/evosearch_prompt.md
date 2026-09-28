@@ -29,6 +29,13 @@ Frozen settings (must stay identical to the disagreement arm)
   {"selection": "top3_pass_rate", "candidates": {"candidate_A": {"parents": ["iter_MM/candidate_X", ...],
    "parent_pass_rates": [..]}, ...}}
 
+Isolation (runs must be independent)
+- Read-only inputs: START_CODE, the fix loop's validation_result.json, and the fix loop's own
+  findings.md/task_analysis.md in outputs/libero_fix_loop/libero_goal_swap/put_the_bowl_on_the_stove/.
+- Never open, list or search any other comparison run: outputs/claude_evosearch_r*,
+  outputs/claude_disagreement_r*, outputs/aspire_*_eval_r* — except this run's own two roots.
+  Brief the subagent with the same rule. Do not save memories about this run.
+
 Hardware (NTU TC1, 1 V100, 6 h SLURM job)
 - GPU 0 only; SAM3/GraspNet/PyRoKi already run on it (8114-8116). Never start/stop them.
 - /tmp is wiped per job: every script, pid file, snapshot and log goes under outputs/.
