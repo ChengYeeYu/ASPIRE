@@ -4,7 +4,8 @@ Task: `libero_goal_swap / put_the_bowl_on_the_stove`. One fix loop gives the sha
 then evosearch and disagreement-selection runs, 1-3 repetitions each, all from that same start.
 Files used: `fixloop_prompt.md`, `evosearch_prompt.md`, `disagreement_prompt.md`, `skills_snapshot.sh`.
 
-All commands run on TC1 unless marked "laptop". Jupyter-terminal commands assume the Phase 1 env block.
+All commands run on TC1 unless marked "laptop", from `~/ASPIRE/aspire/sim` (not `~/ASPIRE`).
+Everything except `sbatch`/`squeue`/`scancel`/`git` runs in the Jupyter terminal (compute node) with the Phase 1 env block.
 
 ## Phase 0: get the files onto TC1 (once)
 ```bash
@@ -49,17 +50,21 @@ claude "$(cat scripts/tc1/fixloop_prompt.md)"
 ```
 ```bash
 # done when both succeed
+cd ~/ASPIRE/aspire/sim
 T=outputs/libero_fix_loop/libero_goal_swap/put_the_bowl_on_the_stove
 .venv/bin/python3 scripts/libero/record_skill_promotion.py verify --suite libero_goal_swap --task put_the_bowl_on_the_stove
 cat $T/validation_result.json                            # pass_rate = BASELINE_RATE (must be < 0.8)
 ```
 ```bash
-# freeze the starting point (once)
+# freeze the starting point (once) -- Jupyter terminal (compute node), not the head node
+cd ~/ASPIRE/aspire/sim
+T=outputs/libero_fix_loop/libero_goal_swap/put_the_bowl_on_the_stove
 bash scripts/tc1/skills_snapshot.sh save after_fixloop
 chmod a-w $T/fix_code.py $T/validation_result.json
 mkdir -p ~/archive
 tar czf ~/archive/fixloop_$(date +%Y%m%d).tgz outputs/libero_fix_loop outputs/libero_fix_loop_eval \
-  outputs/skill_snapshots/after_fixloop logs -C ~/.claude/projects $(cd ~/.claude/projects && ls -d *ASPIRE-aspire-sim)
+  outputs/skill_snapshots/after_fixloop logs
+(cd ~/.claude/projects && tar czf ~/archive/fixloop_claude_$(date +%Y%m%d).tgz ./*ASPIRE-aspire-sim)   # ./ because the dir name starts with '-'
 git -C ~/ASPIRE rev-parse HEAD > ~/archive/fixloop_commit.txt
 ```
 Then `/exit` Claude and `scancel <jobid>` on the head node. Never rerun the fix loop on this task.
@@ -72,6 +77,7 @@ REP=1                # 1, 2, 3
 ```
 ```bash
 # (a) before: reset the starting point, check nothing carried over from earlier runs
+cd ~/ASPIRE/aspire/sim
 bash scripts/tc1/skills_snapshot.sh restore after_fixloop
 ls ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null        # must be empty/absent; else move it aside
 git -C ~/ASPIRE status --short -- '*.md'                            # no changed CLAUDE.md/runbooks (git checkout -- <file>)
@@ -88,10 +94,11 @@ bash scripts/tc1/skills_snapshot.sh check after_fixloop             # must print
 grep -h '"status"' outputs/aspire_${ARM}_eval_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/runs/*/manifest.json 2>/dev/null   # "complete" (absent = fallback to fix_code)
 ```
 ```bash
-# (c) archive (TC1 home has no backup)
+# (c) archive (TC1 home has no backup) -- Jupyter terminal, before scancel
+cd ~/ASPIRE/aspire/sim
 tar czf ~/archive/${ARM}_r${REP}_$(date +%Y%m%d).tgz \
-  outputs/claude_${ARM}_r${REP} $(ls -d outputs/aspire_${ARM}_eval_r${REP} 2>/dev/null) logs \
-  -C ~/.claude/projects $(cd ~/.claude/projects && ls -d *ASPIRE-aspire-sim)
+  outputs/claude_${ARM}_r${REP} $(ls -d outputs/aspire_${ARM}_eval_r${REP} 2>/dev/null) logs
+(cd ~/.claude/projects && tar czf ~/archive/${ARM}_r${REP}_claude_$(date +%Y%m%d).tgz ./*ASPIRE-aspire-sim)
 git -C ~/ASPIRE rev-parse HEAD > ~/archive/${ARM}_r${REP}_commit.txt
 ```
 Then `/exit` Claude and `scancel <jobid>` on the head node.
