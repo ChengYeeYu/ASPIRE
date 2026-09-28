@@ -63,7 +63,7 @@ bash scripts/tc1/skills_snapshot.sh save after_fixloop
 chmod a-w $T/fix_code.py $T/validation_result.json
 mkdir -p ~/archive
 tar czf ~/archive/fixloop_$(date +%Y%m%d).tgz outputs/libero_fix_loop outputs/libero_fix_loop_eval \
-  outputs/skill_snapshots/after_fixloop logs
+  outputs/libero_fix_loop_debug outputs/working_codes outputs/skill_snapshots/after_fixloop logs   # _debug = Stage 1 dev-seed replays
 (cd ~/.claude/projects && tar czf ~/archive/fixloop_claude_$(date +%Y%m%d).tgz ./*ASPIRE-aspire-sim)   # ./ because the dir name starts with '-'
 git -C ~/ASPIRE rev-parse HEAD > ~/archive/fixloop_commit.txt
 ```
