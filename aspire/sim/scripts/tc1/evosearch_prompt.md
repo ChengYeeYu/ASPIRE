@@ -24,6 +24,11 @@ Frozen settings (must stay identical to the disagreement arm)
   round by pass_rate (runbook default).
 - evosearch_eval.py: --sim-gpus 0 --parallel-per-gpu 2 --no-highlights (use 1 for BOTH arms
   if CUDA OOM, and tell me).
+- Launch every evosearch_eval.py detached so it survives agent/background-task restarts:
+  setsid nohup <command> > $RUN_DIR/iter_NN/eval.log 2>&1 &   then poll for iter_NN/iter_summary.json
+  with short Bash calls. (r1 lost an iter_01 eval at 98/120 when a background agent was restarted.)
+- If an eval dies mid-round: keep its log as iter_NN/eval_crashed_<HHMM>.log, clear that round's
+  partial eval outputs, and re-run the whole round with identical flags. Tell me.
 - Subagent model: dispatch with NO model override, so it inherits this session's /model.
 - Record parents: for every round N >= 1 write $RUN_DIR/iter_NN/parents.json:
   {"selection": "top3_pass_rate", "candidates": {"candidate_A": {"parents": ["iter_MM/candidate_X", ...],
