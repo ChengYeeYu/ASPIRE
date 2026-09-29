@@ -2,7 +2,9 @@
 
 Task: `libero_goal_swap / put_the_bowl_on_the_stove`. One fix loop gives the shared starting point;
 then evosearch and disagreement-selection runs, 1-3 repetitions each, all from that same start.
-Files used: `fixloop_prompt.md`, `evosearch_prompt.md`, `disagreement_prompt.md`, `skills_snapshot.sh`.
+Files used: `fixloop_prompt.md`, `evosearch_prompt.md`, `disagreement_prompt.md`, `skills_snapshot.sh`,
+`select_parents.py` (parent selection as code: `--rule top3` for evosearch, `--rule disagreement` for the
+new arm; the agent only writes candidates). From r2 on, both arms use it; r1's parents were agent-chosen.
 
 All commands run on TC1 unless marked "laptop", from `~/ASPIRE/aspire/sim` (not `~/ASPIRE`).
 Everything except `sbatch`/`squeue`/`scancel`/`git`/quick `ls`/`grep` runs in the Jupyter terminal
@@ -12,7 +14,7 @@ Everything except `sbatch`/`squeue`/`scancel`/`git`/quick `ls`/`grep` runs in th
 | Run | Model | Search (dev 51-65, best per round) | Held-out 1-50 | Notes |
 |---|---|---|---|---|
 | fix loop | previous default | - | 2/50 (4%) | shared start; snapshot `after_fixloop` |
-| evosearch r1 | Sonnet 5 | 13% -> 73% -> 93% (solved in 3 rounds) | 49/50 (98%), failed seed 49 | iter_01 eval killed at 98/120 (23:23), re-run in full, evals detached from then on; job change at 00:42 |
+| evosearch r1 | Sonnet 5 | 13% -> 73% -> 93% (solved in 3 rounds) | 49/50 (98%), failed seed 49 | iter_01 eval killed at 98/120 (23:23), re-run in full, evals detached from then on; job change at 00:42. **Parents chosen by the agent** (before select_parents.py): strict top-3 would be B,E,C then G,C,A; agent used B,E,H then G,C,H + A |
 
 ## Phase 0: get the files onto TC1 (after every local commit)
 ```bash
@@ -128,7 +130,8 @@ claude "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)
 RESUMING NOW (unattended, I'm away -- never stop to ask; make the protocol-compliant choice and note it):
 - RUN_DIR $R: rounds with iter_summary.json are complete. Any iter_*_partial_* is a discarded interrupted attempt -- ignore it.
 - Skip preflight approval. If evosearch_best_code.py does not exist: dispatch ONE subagent continuing this RUN_DIR
-  from the next round (top-3 of the last complete round as parents, parents.json as before).
+  from the next round (parents = the last complete round's selection.json; if it is missing, run
+  select_parents.py select for that round first; verify before each eval).
   If it exists: skip Stage 1 and run/resume Stage 2 only (--resume skips finished seeds).
 - Launch every eval detached (setsid nohup ... &) and poll for iter_summary.json; Stage 2 detached the same way."
 ```
@@ -141,6 +144,7 @@ H=outputs/aspire_${ARM}_eval_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove
 ls $H/runs/                                                         # exactly ONE run id (absent = fallback to fix_code)
 grep -h -E '"passes"|"trials"|"status"' $H/runs/*/manifest.json     # "complete", passes/50
 grep -h -A16 '"trial_seeds"' $E/2*/iter_*/iter_summary.json | grep -oE '\b[0-9]+\b' | sort -un | tr '\n' ' '; echo   # only 51..65
+for d in $E/2*/iter_0[1-9]; do .venv/bin/python3 scripts/tc1/select_parents.py verify --iter-dir $d; done   # every round OK
 bash scripts/tc1/skills_snapshot.sh check after_fixloop             # OK
 ls docs/logs/ ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null   # nothing new
 ```

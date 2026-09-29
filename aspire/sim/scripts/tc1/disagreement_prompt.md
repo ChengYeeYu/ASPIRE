@@ -13,18 +13,16 @@ with exactly these substitutions and nothing else changed:
    - EVALDIR       = outputs/aspire_disagreement_eval_r{{REP}}
    (also in the Stage 2 command: --fix-code outputs/claude_disagreement_r{{REP}}/.../evosearch_best_code.py
     --output-dir outputs/aspire_disagreement_eval_r{{REP}})
-2. Parent selection: replace "top-3 candidates of the current round by pass_rate" (runbook Step 6,
-   item 3) with the rule below. Still exactly 8 candidates per round, same seeds, same stop rules,
-   same evosearch_eval.py flags. parents.json uses "selection": "disagreement".
-3. The subagent brief must include the rule below verbatim.
+2. Parent selection: in every select_parents.py command use --rule disagreement instead of
+   --rule top3 (selection.json then holds the disagreement parents). Everything else about parents is
+   unchanged: only the script chooses them, children use only those parents, verify before each eval.
+   parents.json uses "selection": "disagreement". Still exactly 8 candidates per round, same seeds,
+   same stop rules, same evosearch_eval.py flags.
+3. The subagent brief must include the rule description below verbatim.
 
 Parent selection rule (disagreement)
-- TODO: define the rule. Fill in:
-  - Signal: what "disagreement" is measured on (e.g. per-seed pass/fail vectors of the round's
-    candidates from iter_NN/candidate_*/eval/, trace features, ...), and the exact computation.
-  - Selection: how the parents for the next 8 candidates are chosen from it (how many parents,
-    tie-breaks, whether pass_rate still gates them).
-  - Script: path of any helper that computes it (e.g. scripts/tc1/disagreement_select.py), its
-    command line, and the file it writes (e.g. iter_NN/selection.json) that parents.json must match.
+- TODO: implement select_disagreement() in scripts/tc1/select_parents.py (it gets every candidate's
+  per-seed 0/1 pass vector on seeds 51-65 and must return exactly 3 parents, deterministically), then
+  replace this TODO with a one-paragraph description of the rule for the subagent brief.
 - Everything that is not parent selection (candidate generation prompt, K, diagnosis, stop rules)
   stays identical to the evosearch arm.

@@ -20,8 +20,13 @@ Frozen settings (must stay identical to the disagreement arm)
 - Dev seeds 51-65 only during rounds: --trial-seeds 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65.
 - Stop when best candidate >= 80% on seeds 51-65, or after 5 rounds (iter_00..iter_04).
   No plateau stop, no early stop.
-- Parent selection: next round's 8 candidates are seeded from the top-3 candidates of the current
-  round by pass_rate (runbook default).
+- Parent selection is done by a SCRIPT, not by you or the subagent (this replaces runbook Step 6
+  item 3 "seeded from top-3 survivors" and evosearch-iteration.md's "any prior iterations"):
+  after round NN's iter_summary.json exists, run
+    .venv/bin/python3 scripts/tc1/select_parents.py select --rule top3 --iter-dir $RUN_DIR/iter_NN
+  It writes iter_NN/selection.json with exactly 3 parents (ties broken by the script). Every
+  iter_NN+1 candidate must be derived only from those parents (one or more of them each); never
+  substitute, add, or reorder parents by judgment, and never use parents from older rounds.
 - evosearch_eval.py: --sim-gpus 0 --parallel-per-gpu 2 --no-highlights (use 1 for BOTH arms
   if CUDA OOM, and tell me).
 - Launch every evosearch_eval.py detached so it survives agent/background-task restarts:
@@ -31,8 +36,11 @@ Frozen settings (must stay identical to the disagreement arm)
   partial eval outputs, and re-run the whole round with identical flags. Tell me.
 - Subagent model: dispatch with NO model override, so it inherits this session's /model.
 - Record parents: for every round N >= 1 write $RUN_DIR/iter_NN/parents.json:
-  {"selection": "top3_pass_rate", "candidates": {"candidate_A": {"parents": ["iter_MM/candidate_X", ...],
+  {"selection": "top3", "candidates": {"candidate_A": {"parents": ["iter_MM/candidate_X", ...],
    "parent_pass_rates": [..]}, ...}}
+  then, BEFORE launching that round's eval, run
+    .venv/bin/python3 scripts/tc1/select_parents.py verify --iter-dir $RUN_DIR/iter_NN
+  and fix the candidates/parents.json until it prints OK.
 
 Isolation (runs must be independent)
 - Read-only inputs: START_CODE, the fix loop's validation_result.json, and the fix loop's own
