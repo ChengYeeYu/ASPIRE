@@ -34,7 +34,11 @@ Frozen settings (must stay identical to the disagreement arm)
   with short Bash calls. (r1 lost an iter_01 eval at 98/120 when a background agent was restarted.)
 - If an eval dies mid-round: keep its log as iter_NN/eval_crashed_<HHMM>.log, clear that round's
   partial eval outputs, and re-run the whole round with identical flags. Tell me.
-- Subagent model: dispatch with NO model override, so it inherits this session's /model.
+- Subagent model: dispatch with NO model override, so it inherits this session's model (claude-sonnet-5).
+- Final code is chosen by the SCRIPT (replaces Step 7a's leaderboard pick / fallback check): when Stage 1
+  stops, run  .venv/bin/python3 scripts/tc1/select_parents.py best --run-dir $RUN_DIR
+  and copy the code_path in RUN_DIR/best.json to evosearch_best_code.py (fallback_to_start_code=true means
+  it is START_CODE).
 - Record parents: for every round N >= 1 write $RUN_DIR/iter_NN/parents.json:
   {"selection": "top3", "candidates": {"candidate_A": {"parents": ["iter_MM/candidate_X", ...],
    "parent_pass_rates": [..]}, ...}}

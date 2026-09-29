@@ -9,6 +9,9 @@ instead, so the selection rule is code and the agent only writes the new candida
           reads iter_NN/iter_summary.json, writes iter_NN/selection.json (parents for iter_NN+1)
   verify  --iter-dir RUN_DIR/iter_NN          (NN >= 1)
           checks iter_NN/parents.json only uses parents from iter_{NN-1}/selection.json
+  best    --run-dir RUN_DIR
+          final code: highest dev pass rate over ALL finished rounds (ties: later round, then name);
+          falls back to iter_00/candidate_A (START_CODE) unless it is strictly beaten. Writes RUN_DIR/best.json
 
 Standard library only. Run with .venv/bin/python3 from aspire/sim.
 """
@@ -130,6 +133,40 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_best(args: argparse.Namespace) -> int:
+    run_dir = args.run_dir.resolve()
+    rounds = sorted(d for d in run_dir.glob("iter_[0-9][0-9]") if (d / "iter_summary.json").exists())
+    if not rounds:
+        raise SystemExit(f"no finished rounds in {run_dir}")
+    entries = []
+    for d in rounds:
+        candidates, seeds = load_round(d)
+        for c in candidates:
+            entries.append((c["pass_count"], int(d.name.split("_")[1]), c["candidate"], d, len(seeds)))
+    baseline = next((e for e in entries if e[1] == 0 and e[2] == "candidate_A"), None)
+    if baseline is None:
+        raise SystemExit("iter_00/candidate_A (START_CODE) not found")
+    # max pass_count; ties -> later round; then earlier candidate name
+    winner = sorted(entries, key=lambda e: (-e[0], -e[1], e[2]))[0]
+    fallback = winner[0] <= baseline[0]
+    chosen = baseline if fallback else winner
+    result = {
+        "rule": "max dev pass_count over all finished rounds; ties: later round, then candidate name; "
+                "fallback to iter_00/candidate_A unless strictly beaten",
+        "rounds": [d.name for d in rounds],
+        "best": f"{chosen[3].name}/{chosen[2]}",
+        "code_path": str(chosen[3] / chosen[2] / "code.py"),
+        "pass_count": chosen[0], "seeds": chosen[4], "pass_rate": round(chosen[0] / chosen[4], 4),
+        "fallback_to_start_code": fallback,
+        "start_code_pass_count": baseline[0],
+        "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    (run_dir / "best.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(f"best: {result['best']}  {chosen[0]}/{chosen[4]}  fallback={fallback}  -> {run_dir / 'best.json'}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -138,8 +175,10 @@ def main() -> int:
     s.add_argument("--iter-dir", type=Path, required=True)
     v = sub.add_parser("verify")
     v.add_argument("--iter-dir", type=Path, required=True)
+    b = sub.add_parser("best")
+    b.add_argument("--run-dir", type=Path, required=True)
     args = parser.parse_args()
-    return cmd_select(args) if args.command == "select" else cmd_verify(args)
+    return {"select": cmd_select, "verify": cmd_verify, "best": cmd_best}[args.command](args)
 
 
 if __name__ == "__main__":

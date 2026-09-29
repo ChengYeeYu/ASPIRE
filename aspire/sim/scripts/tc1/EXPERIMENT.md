@@ -15,6 +15,7 @@ Everything except `sbatch`/`squeue`/`scancel`/`git`/quick `ls`/`grep` runs in th
 |---|---|---|---|---|---|
 | fix loop | Sonnet 5 (1 Opus 5.5 call) | - | 2/50 (4%) | agent 2h15m; 194 calls, 40k output, 30.5M cache-read | shared start; snapshot `after_fixloop` |
 | evosearch r1 | Sonnet 5 | 13% -> 73% -> 93% (solved in 3 rounds) | 49/50 (98%), failed seed 49 | 5h40m (rounds 1h42/1h52/1h12, Stage 2 47m); 244 calls, 122k output, 29.9M cache-read | iter_01 eval killed at 98/120 (23:23), re-run in full, evals detached from then on; job change at 00:42. **Parents chosen by the agent** (before select_parents.py): strict top-3 would be B,E,C then G,C,A; agent used B,E,H then G,C,H + A |
+| evosearch r2 | Sonnet 5 (`--model`) | 20% -> 47% -> 47% -> 53% -> (iter_04 re-run pending) | pending | job 66244 timed out at iter_04 66/120 | script top-3 parents (first run with select_parents.py). Attempt 1 (09:44-10:26, Sonnet 5.5 by mistake) discarded to ~/archive/discarded_evosearch_r2_sonnet55_20260929 |
 
 ## Phase 0: get the files onto TC1 (after every local commit)
 ```bash
@@ -91,7 +92,7 @@ ls docs/logs/                                                       # only .gitk
 git -C ~/ASPIRE status --short -- '*.md'                            # only skills grasp.md/transport.md + docs/progress (expected)
 ls -d outputs/claude_${ARM}_r${REP} 2>/dev/null                     # must NOT exist yet
 grep -c setsid scripts/tc1/evosearch_prompt.md                      # >= 1 (latest prompt pulled)
-claude "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)"
+claude --model claude-sonnet-5 "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)"
 ```
 Check the preflight before saying "go":
 - BASELINE_RATE 4% (2/50), START_CODE = fix-loop `fix_code.py`
@@ -122,17 +123,24 @@ Phase 1, then in the Jupyter terminal (NO `restore` line -- the library is alrea
 ```bash
 ARM=evosearch; REP=2
 R=$(ls -d outputs/claude_${ARM}_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/2*/ | tail -1)
-for d in $R/iter_*/; do [ -f $d/iter_summary.json ] || mv $d ${d%/}_partial_$(date +%H%M); done   # set aside the unfinished round
+# unfinished round: keep it if its 8 candidates + parents.json verify (re-run its eval only), else set it aside
+for d in $R/iter_*/; do [ -f $d/iter_summary.json ] && continue
+  if [ $(ls $d/candidate_*/code.py 2>/dev/null | wc -l) -eq 8 ] && { [ $(basename $d) = iter_00 ] || .venv/bin/python3 scripts/tc1/select_parents.py verify --iter-dir $d; }; then
+    mv $d/eval.log $d/eval_crashed_$(date +%H%M).log 2>/dev/null; rm -rf $d/candidate_*/eval $d/candidate_*/eval_results.json; echo "KEEP $d (re-evaluate)"
+  else mv $d ${d%/}_partial_$(date +%H%M); echo "SET ASIDE $d"; fi; done
 bash scripts/tc1/skills_snapshot.sh check after_fixloop
 ls $R; ls outputs/claude_${ARM}_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/
-claude "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)
+claude --model claude-sonnet-5 "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)
 
 RESUMING NOW (unattended, I'm away -- never stop to ask; make the protocol-compliant choice and note it):
 - RUN_DIR $R: rounds with iter_summary.json are complete. Any iter_*_partial_* is a discarded interrupted attempt -- ignore it.
+  A round WITHOUT iter_summary.json but with 8 candidate code.py files was kept on purpose: do not rewrite its
+  candidates; just re-run its eval (identical flags, detached), then continue.
 - Skip preflight approval. If evosearch_best_code.py does not exist: dispatch ONE subagent continuing this RUN_DIR
   from the next round (parents = the last complete round's selection.json; if it is missing, run
   select_parents.py select for that round first; verify before each eval).
   If it exists: skip Stage 1 and run/resume Stage 2 only (--resume skips finished seeds).
+- When Stage 1 stops (>=80% or 5 rounds done), pick the final code with select_parents.py best (not by judgment).
 - Launch every eval detached (setsid nohup ... &) and poll for iter_summary.json; Stage 2 detached the same way."
 ```
 Wait until an `Agent(...)` line (or the Stage 2 launch) appears before walking away.
