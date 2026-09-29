@@ -40,6 +40,8 @@ Isolation (runs must be independent)
 - Never open, list or search any other comparison run: outputs/claude_evosearch_r*,
   outputs/claude_disagreement_r*, outputs/aspire_*_eval_r* — except this run's own two roots.
   Brief the subagent with the same rule. Do not save memories about this run.
+- CLAUDE.md's "Self-Evolve"/"Log Everything" rules are suspended for this run: do not read or write
+  docs/logs/, do not edit CLAUDE.md or any runbook, do not edit skills. Findings go to findings.md only.
 
 Hardware (NTU TC1, 1 V100, 6 h SLURM job)
 - GPU 0 only; SAM3/GraspNet/PyRoKi already run on it (8114-8116). Never start/stop them.

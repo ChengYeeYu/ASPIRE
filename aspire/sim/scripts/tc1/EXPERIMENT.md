@@ -5,29 +5,36 @@ then evosearch and disagreement-selection runs, 1-3 repetitions each, all from t
 Files used: `fixloop_prompt.md`, `evosearch_prompt.md`, `disagreement_prompt.md`, `skills_snapshot.sh`.
 
 All commands run on TC1 unless marked "laptop", from `~/ASPIRE/aspire/sim` (not `~/ASPIRE`).
-Everything except `sbatch`/`squeue`/`scancel`/`git` runs in the Jupyter terminal (compute node) with the Phase 1 env block.
+Everything except `sbatch`/`squeue`/`scancel`/`git`/quick `ls`/`grep` runs in the Jupyter terminal
+(compute node) with the Phase 1 env block. `scp` always runs on the laptop.
 
-## Phase 0: get the files onto TC1 (once)
+## Results so far
+| Run | Model | Search (dev 51-65, best per round) | Held-out 1-50 | Notes |
+|---|---|---|---|---|
+| fix loop | previous default | - | 2/50 (4%) | shared start; snapshot `after_fixloop` |
+| evosearch r1 | Sonnet 5 | 13% -> 73% -> 93% (solved in 3 rounds) | 49/50 (98%), failed seed 49 | iter_01 eval killed at 98/120 (23:23), re-run in full, evals detached from then on; job change at 00:42 |
+
+## Phase 0: get the files onto TC1 (after every local commit)
 ```bash
 # laptop
 cd ~/aspire_vla/ASPIRE && git push origin ChengYeeYu
 
 # TC1 head node
-ssh yu0001ee@10.96.189.11
-cd ~/ASPIRE && git pull        # if it complains about fixloop_prompt.md: rm aspire/sim/scripts/tc1/fixloop_prompt.md, pull again
+cd ~/ASPIRE && git pull
 ```
 
-## Phase 1: start a session (every run)
+## Phase 1: start a session (every run / every resume)
 ```bash
 # TC1 head node
 module load slurm && cd ~/ASPIRE/aspire/sim
+squeue -u $USER                                          # no old session still running (else scancel it)
 sbatch scripts/tc1/04_session.sh
 squeue -u $USER                                          # wait for R; note <jobid>
 grep -m1 'node ip' logs/error_aspire-session_<jobid>.err
 grep -m1 -o 'http://[0-9.]*:8891/lab?token=[a-z0-9]*' logs/error_aspire-session_<jobid>.err
 ```
 ```bash
-# laptop, new terminal, leave open
+# laptop, new terminal, leave open (it logs you into the head node -- don't type in it)
 ssh -L 8891:<node-ip>:8891 yu0001ee@10.96.189.11
 # browser: http://127.0.0.1:8891/lab?token=<token>  ->  File > New > Terminal
 ```
@@ -40,25 +47,23 @@ export ASPIRE_ROOT=$PWD PYTHON_ROOT=$(cd ../.. && pwd) MUJOCO_GL=egl TORCH_FORCE
 export UV_CACHE_DIR=/tmp/$USER/uv UV_LINK_MODE=copy
 for p in 8114 8115 8116; do echo -n "$p: "; curl -s -o /dev/null -w '%{http_code}\n' --max-time 3 http://127.0.0.1:$p/health; done   # all 404
 ```
-- Closing the browser tab / tunnel is fine. File > Shut Down or `scancel` kills the job.
-- Job lasts 6 h: near the end, let Claude finish its current step, `/exit`, `scancel <jobid>`.
+- Closing the browser tab / tunnel / laptop is fine. File > Shut Down or `scancel` kills the job.
+- Jobs last 6 h. To use a night fully, start a fresh job right before sleeping (see Phase 3, resume).
+- Don't open files under `.claude/libero/skills/` in the Jupyter editor (it creates `.ipynb_checkpoints/`);
+  use `cat`/`less`.
 
-## Phase 2: fix loop (the shared starting point, run once)
+## Phase 2: fix loop (the shared starting point) -- DONE 28 Sep 2026
 ```bash
-# first run AND every resume after a job ended (new session, Phase 1 first)
-claude "$(cat scripts/tc1/fixloop_prompt.md)"
+claude "$(cat scripts/tc1/fixloop_prompt.md)"          # first run AND every resume
 ```
 ```bash
 # done when both succeed
-cd ~/ASPIRE/aspire/sim
 T=outputs/libero_fix_loop/libero_goal_swap/put_the_bowl_on_the_stove
 .venv/bin/python3 scripts/libero/record_skill_promotion.py verify --suite libero_goal_swap --task put_the_bowl_on_the_stove
 cat $T/validation_result.json                            # pass_rate = BASELINE_RATE (must be < 0.8)
 ```
 ```bash
-# freeze the starting point (once) -- Jupyter terminal (compute node), not the head node
-cd ~/ASPIRE/aspire/sim
-T=outputs/libero_fix_loop/libero_goal_swap/put_the_bowl_on_the_stove
+# freeze the starting point (once, Jupyter terminal)
 bash scripts/tc1/skills_snapshot.sh save after_fixloop
 chmod a-w $T/fix_code.py $T/validation_result.json
 mkdir -p ~/archive
@@ -67,54 +72,106 @@ tar czf ~/archive/fixloop_$(date +%Y%m%d).tgz outputs/libero_fix_loop outputs/li
 (cd ~/.claude/projects && tar czf ~/archive/fixloop_claude_$(date +%Y%m%d).tgz ./*ASPIRE-aspire-sim)   # ./ because the dir name starts with '-'
 git -C ~/ASPIRE rev-parse HEAD > ~/archive/fixloop_commit.txt
 ```
-Then `/exit` Claude and `scancel <jobid>` on the head node. Never rerun the fix loop on this task.
+Never rerun the fix loop on this task.
 
 ## Phase 3: one comparison run (repeat per arm and repetition)
-Set these two values, then run the three blocks in order:
+
+### (a) start a run
 ```bash
+# Jupyter terminal, after the Phase 1 env block
 ARM=evosearch        # or: disagreement
-REP=1                # 1, 2, 3
-```
-```bash
-# (a) before: reset the starting point, check nothing carried over from earlier runs
-cd ~/ASPIRE/aspire/sim
+REP=2                # next unused repetition
+rm -rf outputs/skill_snapshots/after_fixloop/.ipynb_checkpoints .claude/libero/skills/.ipynb_checkpoints
 bash scripts/tc1/skills_snapshot.sh restore after_fixloop
-ls ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null        # must be empty/absent; else move it aside
-git -C ~/ASPIRE status --short -- '*.md'                            # no changed CLAUDE.md/runbooks (git checkout -- <file>)
+bash scripts/tc1/skills_snapshot.sh check after_fixloop             # OK
+ls ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null        # empty/absent, else: mv it to ~/archive/<name>_memory
+ls docs/logs/                                                       # only .gitkeep, else move the logs to ~/archive/
+git -C ~/ASPIRE status --short -- '*.md'                            # only skills grasp.md/transport.md + docs/progress (expected)
+ls -d outputs/claude_${ARM}_r${REP} 2>/dev/null                     # must NOT exist yet
+grep -c setsid scripts/tc1/evosearch_prompt.md                      # >= 1 (latest prompt pulled)
 claude "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)"
 ```
-In Claude: check the preflight (BASELINE_RATE matches Phase 2, roots end in `_r$REP`), say "go", approve commands.
-Same `/model` in every run. Fresh `claude` per run, never `--continue` across runs.
+Check the preflight before saying "go":
+- BASELINE_RATE 4% (2/50), START_CODE = fix-loop `fix_code.py`
+- roots `outputs/claude_${ARM}_r${REP}` and `outputs/aspire_${ARM}_eval_r${REP}`
+- model = **Sonnet 5** (same as r1; `/model` before "go" if not)
+- evals detached (`setsid nohup`), ONE subagent, GPU 0, `--parallel-per-gpu 2`, skills check OK
 
-Job ended mid-run: new session, same `ARM`/`REP`, run block (a) WITHOUT the `restore` line; it resumes itself.
-Never start a different arm/repetition while one is half-finished.
+Fresh `claude` per run; never `--continue` across runs. Never start another arm/rep while one is half-finished.
+
+### (b) monitor (second Jupyter terminal; read-only)
 ```bash
-# (b) after the final report (Stage 2 manifest "complete")
-bash scripts/tc1/skills_snapshot.sh check after_fixloop             # must print OK
-grep -h '"status"' outputs/aspire_${ARM}_eval_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/runs/*/manifest.json 2>/dev/null   # "complete" (absent = fallback to fix_code)
+R=$(ls -d outputs/claude_${ARM}_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/2*/ | tail -1)
+date
+for d in $R/iter_*/; do echo "$(basename $d): trials=$(grep -c 'reward=' $d/eval.log 2>/dev/null) summary=$([ -f $d/iter_summary.json ] && echo yes || echo no)"; done
+grep -ho '"best_pass_rate": [0-9.]*' $R/iter_*/iter_summary.json
+ps -ef | grep -E 'evosearch_eval|replay_trial|run_fix_loop_validation' | grep -v grep | wc -l   # >0 while an eval runs
 ```
+- One round = 120 trials (the eval counter says "/400": cosmetic, it stops at 120), ~40-60 min.
+- "Agent ... finished" lines while an eval runs are normal (the worker pauses between polls).
+- **Eval dead** (counter frozen >10 min AND no eval process): tell Claude
+  "iter_NN eval is dead at <n>/120 since <time>; keep the log as eval_crashed_<HHMM>.log, clear the
+  round's partial outputs, re-run the round with identical flags (detached); one worker only."
+- **Worker didn't wake** (`iter_summary.json` exists, no next `iter_*` after 15 min): tell Claude
+  "iter_NN finished at <time> but the worker didn't continue; dispatch one fresh subagent continuing the same RUN_DIR."
+
+### (c) resume after the job ended / before sleeping
+Phase 1, then in the Jupyter terminal (NO `restore` line -- the library is already correct):
 ```bash
-# (c) archive (TC1 home has no backup) -- Jupyter terminal, before scancel
-cd ~/ASPIRE/aspire/sim
+ARM=evosearch; REP=2
+R=$(ls -d outputs/claude_${ARM}_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/2*/ | tail -1)
+for d in $R/iter_*/; do [ -f $d/iter_summary.json ] || mv $d ${d%/}_partial_$(date +%H%M); done   # set aside the unfinished round
+bash scripts/tc1/skills_snapshot.sh check after_fixloop
+ls $R; ls outputs/claude_${ARM}_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/
+claude "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)
+
+RESUMING NOW (unattended, I'm away -- never stop to ask; make the protocol-compliant choice and note it):
+- RUN_DIR $R: rounds with iter_summary.json are complete. Any iter_*_partial_* is a discarded interrupted attempt -- ignore it.
+- Skip preflight approval. If evosearch_best_code.py does not exist: dispatch ONE subagent continuing this RUN_DIR
+  from the next round (top-3 of the last complete round as parents, parents.json as before).
+  If it exists: skip Stage 1 and run/resume Stage 2 only (--resume skips finished seeds).
+- Launch every eval detached (setsid nohup ... &) and poll for iter_summary.json; Stage 2 detached the same way."
+```
+Wait until an `Agent(...)` line (or the Stage 2 launch) appears before walking away.
+
+### (d) after the run (Stage 2 manifest "complete")
+```bash
+E=outputs/claude_${ARM}_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove
+H=outputs/aspire_${ARM}_eval_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove
+ls $H/runs/                                                         # exactly ONE run id (absent = fallback to fix_code)
+grep -h -E '"passes"|"trials"|"status"' $H/runs/*/manifest.json     # "complete", passes/50
+grep -h -A16 '"trial_seeds"' $E/2*/iter_*/iter_summary.json | grep -oE '\b[0-9]+\b' | sort -un | tr '\n' ' '; echo   # only 51..65
+bash scripts/tc1/skills_snapshot.sh check after_fixloop             # OK
+ls docs/logs/ ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null   # nothing new
+```
+### (e) archive (Jupyter terminal, before scancel)
+```bash
 tar czf ~/archive/${ARM}_r${REP}_$(date +%Y%m%d).tgz \
   outputs/claude_${ARM}_r${REP} $(ls -d outputs/aspire_${ARM}_eval_r${REP} 2>/dev/null) logs
 (cd ~/.claude/projects && tar czf ~/archive/${ARM}_r${REP}_claude_$(date +%Y%m%d).tgz ./*ASPIRE-aspire-sim)
 git -C ~/ASPIRE rev-parse HEAD > ~/archive/${ARM}_r${REP}_commit.txt
+ls -lh ~/archive
 ```
-Then `/exit` Claude and `scancel <jobid>` on the head node.
+Then `/exit` Claude, `scancel <jobid>` on the head node, and on the laptop:
+```bash
+scp 'yu0001ee@10.96.189.11:~/archive/*' ~/aspire_vla/archive/
+```
+Add a row to "Results so far" (model, per-round best, held-out, incidents).
 
 ## Run order
-| # | ARM | REP | Needs |
+| # | ARM | REP | Status / needs |
 |---|---|---|---|
-| 1 | evosearch | 1 | Phase 2 done |
-| 2 | disagreement | 1 | TODO in `disagreement_prompt.md` replaced with the rule |
-| 3 | disagreement | 2 | |
-| 4 | evosearch | 2 | |
-| 5-6 | evosearch -> disagreement | 3 | optional |
+| 1 | evosearch | 1 | DONE (98%) |
+| 2 | evosearch | 2 | next (moved ahead of disagreement r1: rule not written yet) |
+| 3 | disagreement | 1 | TODO in `disagreement_prompt.md` replaced with the rule |
+| 4 | disagreement | 2 | |
+| 5-6 | disagreement -> evosearch | 3 | optional |
 
-Arm order alternates per repetition so time/quota drift doesn't favour one arm.
+Evosearch reached 98% held-out here, so final rates can't separate the arms on this task: compare
+rounds-to->=80%, per-round best/mean, and parent rates (`parents.json`) across repetitions -- or move
+to a harder task (new fix loop) to compare final rates.
 
-## Phase 4: compare (any time, from `~/ASPIRE/aspire/sim`)
+## Phase 4: compare (any time)
 ```bash
 .venv/bin/python3 - <<'EOF'
 import json, glob
@@ -130,10 +187,30 @@ for s in sorted(glob.glob(f"outputs/claude_*_r*/{S}/*/iter_*/iter_summary.json")
     print(f"  {s.split('/')[1]:<26} {s.split('/')[-2]}  best={r[0]:.0%}  mean={sum(r)/len(r):.0%}  top3={[round(x*100) for x in r[:3]]}")
 EOF
 ```
-Also compare `iter_NN/parents.json` (which parents each round used, and their rates).
 With 50 held-out seeds, a single rate is about +-7 pp and an arm difference about +-10 pp, so
-differences under ~15-20 pp from one repetition are not conclusive.
+differences under ~15-20 pp from one repetition are not conclusive. Dev-seed rates are noisier still:
+GraspNet is stochastic, so the same code on the same seed can pass once and fail the next time.
+
+## Inspecting results
+Laptop (reading + videos), from the archives:
 ```bash
-# laptop: pull archives
-mkdir -p ~/aspire_vla/archive && scp 'yu0001ee@10.96.189.11:~/archive/*' ~/aspire_vla/archive/
+mkdir -p ~/aspire_vla/inspect && cd ~/aspire_vla/inspect
+tar xzf ../archive/${ARM}_r${REP}_<date>.tgz                        # e.g. evosearch_r1_20260929.tgz
+code ~/aspire_vla/inspect                                           # findings.md, evosearch_best_code.py, iter_*/
+# videos: cd into .../runs/<id>/results/.../run/ and `explorer.exe .`, then open trial_NN_*/video_*.mp4
 ```
+(`aws_anthropic_bedrock-claude-sonnet-4-6` in the trial path is only replay_trial's default label; no model is called.)
+Compare code: VS Code Explorer, right-click fix-loop `fix_code.py` -> Select for Compare, right-click
+`evosearch_best_code.py` -> Compare with Selected.
+
+Run it yourself (TC1 GPU session only -- the laptop GPU is too small), always into `outputs/inspect`:
+```bash
+E=outputs/claude_evosearch_r1/libero_goal_swap/put_the_bowl_on_the_stove
+CUDA_VISIBLE_DEVICES=0 .venv-libero/bin/python3 scripts/libero/replay_trial.py \
+  --args.suite libero_goal_swap --args.task put_the_bowl_on_the_stove --args.trial 120 \
+  --args.replay-code $E/evosearch_best_code.py \
+  --args.config env_configs/libero/franka_libero_traced.yaml --args.output-dir outputs/inspect
+# interactive: replace --args.replay-code ... --args.output-dir ... with  --args.interactive --args.no-record-video
+.venv/bin/python3 scripts/common/analyze_trial.py --trial-dir <trial dir> --verbose
+```
+Seeds >=100 have never been seen by any run: a free extra generalization check.
