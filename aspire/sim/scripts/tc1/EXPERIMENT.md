@@ -159,10 +159,12 @@ ls docs/logs/ ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null   # noth
 ```
 ### (e) archive (Jupyter terminal, before scancel)
 ```bash
+if [ -n "$ARM" ] && [ -n "$REP" ] && [ -d outputs/claude_${ARM}_r${REP} ]; then   # new terminal? set ARM/REP first
 tar czf ~/archive/${ARM}_r${REP}_$(date +%Y%m%d).tgz \
   outputs/claude_${ARM}_r${REP} $(ls -d outputs/aspire_${ARM}_eval_r${REP} 2>/dev/null) logs
 (cd ~/.claude/projects && tar czf ~/archive/${ARM}_r${REP}_claude_$(date +%Y%m%d).tgz ./*ASPIRE-aspire-sim)
 git -C ~/ASPIRE rev-parse HEAD > ~/archive/${ARM}_r${REP}_commit.txt
+else echo "ARM/REP unset or outputs/claude_${ARM}_r${REP} missing -- nothing archived"; fi
 ls -lh ~/archive
 ```
 Then `/exit` Claude, `scancel <jobid>` on the head node, and on the laptop:
