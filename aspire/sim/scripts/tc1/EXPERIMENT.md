@@ -3,7 +3,7 @@
 Task: `libero_goal_swap / put_the_bowl_on_the_stove`. One fix loop gives the shared starting point;
 then evosearch and disagreement-selection runs, 1-3 repetitions each, all from that same start.
 Files used: `fixloop_prompt.md`, `evosearch_prompt.md`, `disagreement_prompt.md`, `skills_snapshot.sh`,
-`select_parents.py` (parent selection as code: `--rule top3` for evosearch, `--rule disagreement` for the
+`run_cost.py` (time + tokens per run), `select_parents.py` (parent selection as code: `--rule top3` for evosearch, `--rule disagreement` for the
 new arm; the agent only writes candidates). From r2 on, both arms use it; r1's parents were agent-chosen.
 
 All commands run on TC1 unless marked "laptop", from `~/ASPIRE/aspire/sim` (not `~/ASPIRE`).
@@ -11,10 +11,10 @@ Everything except `sbatch`/`squeue`/`scancel`/`git`/quick `ls`/`grep` runs in th
 (compute node) with the Phase 1 env block. `scp` always runs on the laptop.
 
 ## Results so far
-| Run | Model | Search (dev 51-65, best per round) | Held-out 1-50 | Notes |
-|---|---|---|---|---|
-| fix loop | previous default | - | 2/50 (4%) | shared start; snapshot `after_fixloop` |
-| evosearch r1 | Sonnet 5 | 13% -> 73% -> 93% (solved in 3 rounds) | 49/50 (98%), failed seed 49 | iter_01 eval killed at 98/120 (23:23), re-run in full, evals detached from then on; job change at 00:42. **Parents chosen by the agent** (before select_parents.py): strict top-3 would be B,E,C then G,C,A; agent used B,E,H then G,C,H + A |
+| Run | Model | Search (dev 51-65, best per round) | Held-out 1-50 | Time / tokens (run_cost.py) | Notes |
+|---|---|---|---|---|---|
+| fix loop | Sonnet 5 (1 Opus 5.5 call) | - | 2/50 (4%) | agent 2h15m; 194 calls, 40k output, 30.5M cache-read | shared start; snapshot `after_fixloop` |
+| evosearch r1 | Sonnet 5 | 13% -> 73% -> 93% (solved in 3 rounds) | 49/50 (98%), failed seed 49 | 5h40m (rounds 1h42/1h52/1h12, Stage 2 47m); 244 calls, 122k output, 29.9M cache-read | iter_01 eval killed at 98/120 (23:23), re-run in full, evals detached from then on; job change at 00:42. **Parents chosen by the agent** (before select_parents.py): strict top-3 would be B,E,C then G,C,A; agent used B,E,H then G,C,H + A |
 
 ## Phase 0: get the files onto TC1 (after every local commit)
 ```bash
@@ -147,6 +147,7 @@ grep -h -A16 '"trial_seeds"' $E/2*/iter_*/iter_summary.json | grep -oE '\b[0-9]+
 for d in $E/2*/iter_0[1-9]; do .venv/bin/python3 scripts/tc1/select_parents.py verify --iter-dir $d; done   # every round OK
 bash scripts/tc1/skills_snapshot.sh check after_fixloop             # OK
 ls docs/logs/ ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null   # nothing new
+.venv/bin/python3 scripts/tc1/run_cost.py --json ~/archive/run_cost_$(date +%Y%m%d).json   # time + tokens, all runs so far
 ```
 ### (e) archive (Jupyter terminal, before scancel)
 ```bash
@@ -160,7 +161,9 @@ Then `/exit` Claude, `scancel <jobid>` on the head node, and on the laptop:
 ```bash
 scp 'yu0001ee@10.96.189.11:~/archive/*' ~/aspire_vla/archive/
 ```
-Add a row to "Results so far" (model, per-round best, held-out, incidents).
+Add a row to "Results so far" (model, per-round best, held-out, time/tokens from run_cost.py, incidents).
+Claude Code deletes old transcripts after ~30 days by default, so the `*_claude_*.tgz` archives are the
+lasting source for token numbers: `run_cost.py --claude-dir <unpacked dir> --outputs <unpacked outputs>`.
 
 ## Run order
 | # | ARM | REP | Status / needs |
