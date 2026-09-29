@@ -12,6 +12,8 @@ instead, so the selection rule is code and the agent only writes the new candida
   best    --run-dir RUN_DIR
           final code: highest dev pass rate over ALL finished rounds (ties: later round, then name);
           falls back to iter_00/candidate_A (START_CODE) unless it is strictly beaten. Writes RUN_DIR/best.json
+  compare --run-dir RUN_DIR
+          dry run: prints what every rule would pick for each finished round; writes nothing
 
 Standard library only. Run with .venv/bin/python3 from aspire/sim.
 """
@@ -26,6 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 N_PARENTS = 3
+MIN_PASS_PCT = 20   # disagreement: eligibility floor for parents 2..N, % of the round's seeds
 
 
 def load_round(iter_dir: Path) -> tuple[list[dict], list[int]]:
@@ -55,15 +58,33 @@ def select_top3(candidates: list[dict], seeds: list[int]) -> tuple[list[str], st
     return [c["candidate"] for c in ranked[:N_PARENTS]], "pass_count desc, then candidate name asc"
 
 
-def select_disagreement(candidates: list[dict], seeds: list[int]) -> tuple[list[str], str]:
-    """TODO: the disagreement-selection rule.
+def hamming(a: list[int], b: list[int]) -> int:
+    return sum(x != y for x, y in zip(a, b))
 
-    Input: `candidates` (sorted by name), each with `candidate`, `pass_count`, `pass_rate`,
-    `errors`, and `passed` = 0/1 per seed aligned with `seeds`.
-    Return: (exactly N_PARENTS candidate names, one-line description of the rule/tie-break).
-    Must be deterministic: same input -> same output.
+
+def select_disagreement(candidates: list[dict], seeds: list[int]) -> tuple[list[str], str]:
+    """Best candidate, then the eligible candidates that disagree most with the parents so far.
+
+    Parent 1: highest pass_count (ties: name). Parents 2..N: among candidates passing at least
+    MIN_PASS_PCT % of seeds, the one whose smallest Hamming distance (per-seed pass/fail) to the
+    already-chosen parents is largest; ties: pass_count desc, then name. Without a floor a 0/15
+    candidate scores as "most different" from a strong one just by failing everywhere. If too few
+    candidates clear the floor, the remaining slots are filled by pass_count (as top3).
     """
-    raise NotImplementedError("disagreement rule not implemented yet (scripts/tc1/select_parents.py)")
+    ranked = sorted(candidates, key=lambda c: (-c["pass_count"], c["candidate"]))
+    chosen = [ranked[0]]
+    while len(chosen) < N_PARENTS:
+        eligible = [c for c in candidates if c not in chosen
+                    and c["pass_count"] * 100 >= MIN_PASS_PCT * len(seeds)]
+        if eligible:
+            nxt = min(eligible, key=lambda c: (-min(hamming(c["passed"], p["passed"]) for p in chosen),
+                                               -c["pass_count"], c["candidate"]))
+        else:
+            nxt = next(c for c in ranked if c not in chosen)
+        chosen.append(nxt)
+    return ([c["candidate"] for c in chosen],
+            f"best by pass_count, then max-min Hamming distance among candidates >= {MIN_PASS_PCT}% pass "
+            "(ties: pass_count desc, name asc); fill by pass_count if too few eligible")
 
 
 RULES = {"top3": select_top3, "disagreement": select_disagreement}
@@ -167,6 +188,26 @@ def cmd_best(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compare(args: argparse.Namespace) -> int:
+    run_dir = args.run_dir.resolve()
+    rounds = sorted(d for d in run_dir.glob("iter_[0-9][0-9]") if (d / "iter_summary.json").exists())
+    if not rounds:
+        raise SystemExit(f"no finished rounds in {run_dir}")
+    for d in rounds:
+        candidates, seeds = load_round(d)
+        by_name = {c["candidate"]: c for c in candidates}
+        print(f"{d.name}  seeds {seeds[0]}..{seeds[-1]} ({len(seeds)})")
+        for c in candidates:
+            row = "".join("#" if x else "." for x in c["passed"])
+            print(f"  {c['candidate']:12s} {c['pass_count']:2d}/{len(seeds)}  {row}")
+        for rule, fn in sorted(RULES.items()):
+            parents, _ = fn(candidates, seeds)
+            covered = sum(any(by_name[p]["passed"][i] for p in parents) for i in range(len(seeds)))
+            picks = " ".join(f"{p.removeprefix('candidate_')}{by_name[p]['pass_count']}" for p in parents)
+            print(f"  {rule:12s} -> {picks}   (parents together pass {covered}/{len(seeds)} seeds)")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -177,8 +218,10 @@ def main() -> int:
     v.add_argument("--iter-dir", type=Path, required=True)
     b = sub.add_parser("best")
     b.add_argument("--run-dir", type=Path, required=True)
+    c = sub.add_parser("compare")
+    c.add_argument("--run-dir", type=Path, required=True)
     args = parser.parse_args()
-    return {"select": cmd_select, "verify": cmd_verify, "best": cmd_best}[args.command](args)
+    return {"select": cmd_select, "verify": cmd_verify, "best": cmd_best, "compare": cmd_compare}[args.command](args)
 
 
 if __name__ == "__main__":

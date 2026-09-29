@@ -21,8 +21,12 @@ with exactly these substitutions and nothing else changed:
 3. The subagent brief must include the rule description below verbatim.
 
 Parent selection rule (disagreement)
-- TODO: implement select_disagreement() in scripts/tc1/select_parents.py (it gets every candidate's
-  per-seed 0/1 pass vector on seeds 51-65 and must return exactly 3 parents, deterministically), then
-  replace this TODO with a one-paragraph description of the rule for the subagent brief.
+- select_parents.py --rule disagreement picks the 3 parents from the round's per-seed pass/fail
+  results: parent 1 is the candidate with the most passes; parents 2 and 3 are, among candidates that
+  pass at least 20% of the round's seeds, the ones whose pass/fail pattern differs most (Hamming
+  distance) from the parents already chosen; ties go to more passes, then candidate name. If too few
+  candidates reach 20%, the remaining slots go to the most passes. So the parents usually include
+  candidates that are weaker overall but pass seeds the best candidate fails, or fail seeds it passes.
+  iter_NN/selection.json lists every candidate's per-seed results.
 - Everything that is not parent selection (candidate generation prompt, K, diagnosis, stop rules)
   stays identical to the evosearch arm.

@@ -178,13 +178,28 @@ lasting source for token numbers: `run_cost.py --claude-dir <unpacked dir> --out
 |---|---|---|---|
 | 1 | evosearch | 1 | DONE (98%) |
 | 2 | evosearch | 2 | next (moved ahead of disagreement r1: rule not written yet) |
-| 3 | disagreement | 1 | TODO in `disagreement_prompt.md` replaced with the rule |
+| 3 | disagreement | 1 | ready (rule implemented) |
 | 4 | disagreement | 2 | |
 | 5-6 | disagreement -> evosearch | 3 | optional |
 
 Evosearch reached 98% held-out here, so final rates can't separate the arms on this task: compare
 rounds-to->=80%, per-round best/mean, and parent rates (`parents.json`) across repetitions -- or move
 to a harder task (new fix loop) to compare final rates.
+
+## Disagreement rule (`select_disagreement`, decided 29 Sep 2026)
+- Parent 1: most passes. Parents 2-3: among candidates passing >= `MIN_PASS_PCT` = 20% of the round's
+  seeds (3/15), the one with the largest minimum Hamming distance (per-seed pass/fail) to the parents
+  already chosen; ties: more passes, then name. Too few eligible -> fill by most passes (= top3).
+- Why the floor: without it a 0/15 candidate is "most different" from a strong one just by failing
+  (on r1 iter_01 it would pick B 0/15). Budget is unchanged: 8 candidates x max 5 rounds per arm.
+- Dry run on any finished run: `.venv/bin/python3 scripts/tc1/select_parents.py compare --run-dir $RUN_DIR`.
+  On r1: iter_00 same as top3 (nobody but the best reaches 3/15); iter_01 G C F vs top3 G C A;
+  iter_02 F E C vs top3 F B A.
+- The prompt only describes what the rule does. No "learn from the complementary failures" motivation
+  in one arm only: that would change the rule and the instructions at once. To test that
+  guidance, add a third arm (disagreement + guidance) instead.
+- Write-up: the floor (20%) and the tie-break were chosen after seeing r1's data; say so. Report
+  programs-to->=80% as well as held-out, since the >=80% stop ends the faster arm earlier.
 
 ## Phase 4: compare (any time)
 ```bash
