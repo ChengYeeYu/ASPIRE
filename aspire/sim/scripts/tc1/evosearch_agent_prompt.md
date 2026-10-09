@@ -28,3 +28,9 @@ as {{REP}}, with exactly these substitutions and nothing else changed:
    complete round's leaderboard as in 2.
 
 Same model, K, seeds 51-65, stop rules, evosearch_eval.py flags, detached evals, single subagent.
+
+Skill library stays FROZEN at the after_fixloop snapshot (unchanged from evosearch_prompt.md; the agent
+choosing parents does NOT extend to skills): nobody edits .claude/libero/skills/, patterns go into
+findings.md only, and the subagent brief says so. Run
+  bash scripts/tc1/skills_snapshot.sh check after_fixloop
+in preflight (do not start if it is not OK), after every round's eval, and in the final report.
