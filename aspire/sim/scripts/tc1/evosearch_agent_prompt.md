@@ -27,7 +27,12 @@ as {{REP}}, with exactly these substitutions and nothing else changed:
 4. In the resuming rules: when continuing a RUN_DIR, the new subagent chooses parents from the last
    complete round's leaderboard as in 2.
 
-Same model, K, seeds 51-65, stop rules, evosearch_eval.py flags, detached evals, single subagent.
+5. evosearch_eval.py runs with --parallel-per-gpu 4 (not 2): --sim-gpus 0 --parallel-per-gpu 4
+   --no-highlights. Approved deviation for speed (benchmarked on GPU 0 next to the servers: 34 vs 55 min
+   per round, no trial near the 180 s timeout); do not stop on it in preflight. If CUDA OOM, drop to 2
+   and tell me.
+
+Same model, K, seeds 51-65, stop rules, other evosearch_eval.py flags, detached evals, single subagent.
 
 Skill library stays FROZEN at the after_fixloop snapshot (unchanged from evosearch_prompt.md; the agent
 choosing parents does NOT extend to skills): nobody edits .claude/libero/skills/, patterns go into

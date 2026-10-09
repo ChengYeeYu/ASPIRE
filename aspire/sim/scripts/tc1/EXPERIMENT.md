@@ -193,8 +193,10 @@ to a harder task (new fix loop) to compare final rates.
 ## evosearch_agent arm (original ASPIRE parent selection)
 Same as evosearch except the agent picks parents itself (runbook Step 6 "top-3 survivors") and the final
 code (Step 7a); `parents.json` is still written, with `"selection": "agent"`. It repeats r1's condition
-with the later fixes (detached evals, pinned model). Run it with `ARM=evosearch_agent REP=1` in Phase 3,
-with these differences:
+with the later fixes (detached evals, pinned model). Evals use `--parallel-per-gpu 4` (other runs: 2) for
+speed: bench_parallel.sh on evosearch r2 iter_04 took 34 vs 55 min, no timeouts, 114/120 trials same
+pass/fail; the 6 flips were all candidate F, never re-run at 2 workers, so not proven harmless -- say so
+in the write-up. Run it with `ARM=evosearch_agent REP=1` in Phase 3, with these differences:
 - (c) resume: in the RESUMING text replace "parents = the last complete round's selection.json ... verify
   before each eval" with "the subagent picks parents from the last complete round's leaderboard (runbook
   Step 6), writes parents.json", and the final-pick line with "pick the final code as in runbook Step 7a;
