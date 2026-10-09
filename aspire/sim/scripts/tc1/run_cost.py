@@ -34,6 +34,9 @@ def run_of(first_message: str) -> str | None:
     m = re.search(r"as the EVOSEARCH arm, repetition (\d+)", text)
     if m:
         return f"evosearch_r{m.group(1)}"
+    m = re.search(r"EVOSEARCH-AGENT-PARENTS arm, repetition (\d+)", text)
+    if m:
+        return f"evosearch_agent_r{m.group(1)}"
     m = re.search(r"DISAGREEMENT-SELECTION arm, repetition (\d+)", text)
     if m:
         return f"disagreement_r{m.group(1)}"

@@ -15,7 +15,8 @@ Everything except `sbatch`/`squeue`/`scancel`/`git`/quick `ls`/`grep` runs in th
 |---|---|---|---|---|---|
 | fix loop | Sonnet 5 (1 Opus 5.5 call) | - | 2/50 (4%) | agent 2h15m; 194 calls, 40k output, 30.5M cache-read | shared start; snapshot `after_fixloop` |
 | evosearch r1 | Sonnet 5 | 13% -> 73% -> 93% (solved in 3 rounds) | 49/50 (98%), failed seed 49 | 5h40m (rounds 1h42/1h52/1h12, Stage 2 47m); 244 calls, 122k output, 29.9M cache-read | iter_01 eval killed at 98/120 (23:23), re-run in full, evals detached from then on; job change at 00:42. **Parents chosen by the agent** (before select_parents.py): strict top-3 would be B,E,C then G,C,A; agent used B,E,H then G,C,H + A |
-| evosearch r2 | Sonnet 5 (`--model`) | 20% -> 47% -> 47% -> 53% -> (iter_04 re-run pending) | pending | job 66244 timed out at iter_04 66/120 | script top-3 parents (first run with select_parents.py). Attempt 1 (09:44-10:26, Sonnet 5.5 by mistake) discarded to ~/archive/discarded_evosearch_r2_sonnet55_20260929 |
+| evosearch r2 | Sonnet 5 (`--model`) | 20% -> 47% -> 47% -> 53% -> 67% (not solved, 5-round cap; best iter_04/F) | 19/50 (38%) | 7h38m (rounds 1h15/1h20/1h13/1h12/1h50, Stage 2 47m); 222 calls, 73k output, 43.5M cache-read | script top-3 parents (first run with select_parents.py). job 66244 timed out at iter_04 66/120; re-run gave identical results on all 66 overlapping trials. Held-out failures (31): 17 arm stopped ~14 cm short of release, 14 reached release height but failed (cause TBD), per trace.json; r1: 1 (see FINDINGS.md F2). Attempt 1 (09:44-10:26, Sonnet 5.5 by mistake) discarded to ~/archive/discarded_evosearch_r2_sonnet55_20260929 |
+| disagreement r1 | Sonnet 5 (`--model`) | 13% -> 33% -> 27% -> 33% -> 47% (not solved, 5-round cap; best iter_04/H) | 23/50 (46%) | 8h47m (rounds 1h13/1h18/1h21/2h24/1h21, Stage 2 1h07); 132 calls, 31k output, 21.8M cache-read -- **tokens look undercounted** (1 session, 0 calls in iter_04; 8 new ~200-line candidates per round can't fit in ~2k output) | parents = same set as top3 in all 5 rounds (only order differs; see FINDINGS.md F7). iter_03 eval crashed at 76/120 (23:58), re-run. Held-out failures (27): 22 stopped short, 5 at release height. Repeats cut 3->2 from iter_03 on |
 
 ## Phase 0: get the files onto TC1 (after every local commit)
 ```bash
@@ -180,13 +181,27 @@ lasting source for token numbers: `run_cost.py --claude-dir <unpacked dir> --out
 |---|---|---|---|
 | 1 | evosearch | 1 | DONE (98%) |
 | 2 | evosearch | 2 | next (moved ahead of disagreement r1: rule not written yet) |
-| 3 | disagreement | 1 | ready (rule implemented) |
+| 3 | disagreement | 1 | DONE (46%); rule never changed the parent set (FINDINGS.md F7) |
 | 4 | disagreement | 2 | |
 | 5-6 | disagreement -> evosearch | 3 | optional |
+| 7 | evosearch_agent | 1 | next: original ASPIRE, parents and final pick chosen by the agent (like r1); prompt `evosearch_agent_prompt.md` |
 
 Evosearch reached 98% held-out here, so final rates can't separate the arms on this task: compare
 rounds-to->=80%, per-round best/mean, and parent rates (`parents.json`) across repetitions -- or move
 to a harder task (new fix loop) to compare final rates.
+
+## evosearch_agent arm (original ASPIRE parent selection)
+Same as evosearch except the agent picks parents itself (runbook Step 6 "top-3 survivors") and the final
+code (Step 7a); `parents.json` is still written, with `"selection": "agent"`. It repeats r1's condition
+with the later fixes (detached evals, pinned model). Run it with `ARM=evosearch_agent REP=1` in Phase 3,
+with these differences:
+- (c) resume: in the RESUMING text replace "parents = the last complete round's selection.json ... verify
+  before each eval" with "the subagent picks parents from the last complete round's leaderboard (runbook
+  Step 6), writes parents.json", and the final-pick line with "pick the final code as in runbook Step 7a;
+  run select_parents.py best for the record only". The keep/set-aside loop's `verify` fails for this arm:
+  keep an unfinished round if it has 8 candidates and a parents.json.
+- (d) skip the `select_parents.py verify` loop; check every `iter_0[1-9]/parents.json` exists instead.
+  `best.json` is the script's pick for reference; Stage 2 used `evosearch_best_code.py` (agent pick).
 
 ## Disagreement rule (`select_disagreement`, decided 29 Sep 2026)
 - Parent 1: most passes. Parents 2-3: among candidates passing >= `MIN_PASS_PCT` = 20% of the round's

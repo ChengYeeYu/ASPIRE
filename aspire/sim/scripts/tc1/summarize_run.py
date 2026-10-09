@@ -25,7 +25,7 @@ TASK = "libero_goal_swap/put_the_bowl_on_the_stove"
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("arm", choices=["evosearch", "disagreement"])
+    ap.add_argument("arm", choices=["evosearch", "evosearch_agent", "disagreement"])
     ap.add_argument("rep", type=int)
     ap.add_argument("--outputs", default="outputs")
     a = ap.parse_args()
