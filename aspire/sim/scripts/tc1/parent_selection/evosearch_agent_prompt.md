@@ -2,7 +2,7 @@ Run the EVOSEARCH-AGENT-PARENTS arm, repetition {{REP}}, of a controlled compari
 Evolutionary Search, where the agent chooses each round's parents itself (as in upstream ASPIRE and
 evosearch r1), for ONE task.
 
-Read scripts/tc1/evosearch_prompt.md and follow ALL of it (fixed inputs, frozen settings, hardware,
+Read scripts/tc1/parent_selection/evosearch_prompt.md and follow ALL of it (fixed inputs, frozen settings, hardware,
 frozen skill library, isolation, agents, Stage 2, resuming, final report), treating every {{REP}} in it
 as {{REP}}, with exactly these substitutions and nothing else changed:
 
@@ -21,7 +21,7 @@ as {{REP}}, with exactly these substitutions and nothing else changed:
    with "selection": "agent", and one line per candidate in findings.md on why those parents.
 3. Final code is chosen as in the runbook (subagent-prompt.md Step 7a: the subagent's pick from the
    final leaderboard + the fallback check), NOT by select_parents.py best. After Stage 1, run
-     .venv/bin/python3 scripts/tc1/select_parents.py best --run-dir $RUN_DIR
+     .venv/bin/python3 scripts/tc1/parent_selection/select_parents.py best --run-dir $RUN_DIR
    for the record only (it writes best.json; do not use it to change evosearch_best_code.py), and
    report both picks.
 4. In the resuming rules: when continuing a RUN_DIR, the new subagent chooses parents from the last
@@ -37,5 +37,5 @@ Same model, K, seeds 51-65, stop rules, other evosearch_eval.py flags, detached 
 Skill library stays FROZEN at the after_fixloop snapshot (unchanged from evosearch_prompt.md; the agent
 choosing parents does NOT extend to skills): nobody edits .claude/libero/skills/, patterns go into
 findings.md only, and the subagent brief says so. Run
-  bash scripts/tc1/skills_snapshot.sh check after_fixloop
+  bash scripts/tc1/common/skills_snapshot.sh check after_fixloop
 in preflight (do not start if it is not OK), after every round's eval, and in the final report.

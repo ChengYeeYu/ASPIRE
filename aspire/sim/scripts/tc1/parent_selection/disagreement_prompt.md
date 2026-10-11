@@ -4,7 +4,7 @@ Evolutionary Search, for ONE task.
 GUARD: if the "Parent selection rule" section below still contains the word TODO, do nothing else:
 report "disagreement selection not implemented yet" and stop.
 
-Read scripts/tc1/evosearch_prompt.md and follow ALL of it (fixed inputs, frozen settings, hardware,
+Read scripts/tc1/parent_selection/evosearch_prompt.md and follow ALL of it (fixed inputs, frozen settings, hardware,
 frozen skill library, agents, Stage 2, resuming, final report), treating every {{REP}} in it as {{REP}},
 with exactly these substitutions and nothing else changed:
 

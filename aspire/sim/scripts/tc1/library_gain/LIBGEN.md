@@ -17,38 +17,38 @@ Same session conventions as EXPERIMENT.md (Phase 0/1: push, `git pull`, Jupyter 
 ## Once: L0, manifest, probes
 ```bash
 # Jupyter terminal, ~/ASPIRE/aspire/sim
-bash scripts/tc1/skills_snapshot.sh save-git L0_clean           # library as committed (pre-fix-loop)
-bash scripts/tc1/skills_snapshot.sh restore L0_clean            # working tree had after_fixloop (saved, recoverable)
+bash scripts/tc1/common/skills_snapshot.sh save-git L0_clean           # library as committed (pre-fix-loop)
+bash scripts/tc1/common/skills_snapshot.sh restore L0_clean            # working tree had after_fixloop (saved, recoverable)
 ROOT=outputs/libgen_goal_swap
-.venv-libero/bin/python3 scripts/tc1/libgen.py init  --root $ROOT --suite libero_goal_swap
-.venv-libero/bin/python3 scripts/tc1/libgen.py probe --root $ROOT   # ~1-2 min/task, resumable
+.venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py init  --root $ROOT --suite libero_goal_swap
+.venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py probe --root $ROOT   # ~1-2 min/task, resumable
 head -3 $ROOT/probe/*.txt                                         # every file has TASK_LANGUAGE; failures -> probe/<task>.err.log
 ```
 
 ## One phase (before, before_b, after_<arm>)
 ```bash
 PHASE=before   SNAP=L0_clean   EXCL=""                          # after: PHASE=after_<arm> SNAP=<L1 snapshot> EXCL="--exclude <task>"
-bash scripts/tc1/skills_snapshot.sh restore $SNAP
-.venv/bin/python3 scripts/tc1/libgen.py phase-start --root $ROOT --phase $PHASE --snapshot $SNAP $EXCL
+bash scripts/tc1/common/skills_snapshot.sh restore $SNAP
+.venv/bin/python3 scripts/tc1/library_gain/libgen.py phase-start --root $ROOT --phase $PHASE --snapshot $SNAP $EXCL
 
 # codegen (resume = same command)
-claude "$(sed -e "s|{{ROOT}}|$ROOT|g" -e "s|{{PHASE}}|$PHASE|g" scripts/tc1/libgen_codegen_prompt.md)"
-.venv/bin/python3 scripts/tc1/libgen.py status --root $ROOT --phase $PHASE   # all slots filled, library OK
+claude "$(sed -e "s|{{ROOT}}|$ROOT|g" -e "s|{{PHASE}}|$PHASE|g" scripts/tc1/library_gain/libgen_codegen_prompt.md)"
+.venv/bin/python3 scripts/tc1/library_gain/libgen.py status --root $ROOT --phase $PHASE   # all slots filled, library OK
 
 # eval: detached, resumable (finished tasks skipped; a crashed task is re-run whole, partial eval kept as eval_partial_*)
-setsid nohup .venv-libero/bin/python3 scripts/tc1/libgen.py eval --root $ROOT --phase $PHASE \
+setsid nohup .venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py eval --root $ROOT --phase $PHASE \
   > $ROOT/$PHASE/eval_driver.log 2>&1 &
 tail -f $ROOT/$PHASE/eval_driver.log                             # per-task log: $ROOT/$PHASE/<task>/eval.log
 
-.venv/bin/python3 scripts/tc1/libgen.py summarize --root $ROOT --phase $PHASE
-bash scripts/tc1/skills_snapshot.sh check $SNAP                  # nothing touched the library
+.venv/bin/python3 scripts/tc1/library_gain/libgen.py summarize --root $ROOT --phase $PHASE
+bash scripts/tc1/common/skills_snapshot.sh check $SNAP                  # nothing touched the library
 ```
 Cost per phase (10 tasks): 40 codegen subagents; eval 400 trials, about 2 h at 4 workers
 (bench: 120 trials in 34 min) plus ~1 min warm-up per task.
 
 ## Gain
 ```bash
-.venv/bin/python3 scripts/tc1/libgen.py gain --root $ROOT --before before --after after_<arm> --noise before_b
+.venv/bin/python3 scripts/tc1/library_gain/libgen.py gain --root $ROOT --before before --after after_<arm> --noise before_b
 ```
 Writes `$ROOT/gain_after_<arm>.json`: per-task before/after/delta, mean delta over the non-excluded
 tasks, and the noise row (before_b minus before). A gain smaller than the noise is not a result.

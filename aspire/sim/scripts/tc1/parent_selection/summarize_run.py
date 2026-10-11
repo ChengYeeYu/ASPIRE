@@ -5,7 +5,7 @@ Per round: best and mean dev pass rate, passes per candidate, dev seeds, next pa
 Then the final pick (best.json) and the Stage 2 held-out manifest.
 
   # TC1, from aspire/sim
-  .venv/bin/python3 scripts/tc1/summarize_run.py disagreement 1
+  .venv/bin/python3 scripts/tc1/parent_selection/summarize_run.py disagreement 1
   # laptop, on unpacked archives
   python3 summarize_run.py disagreement 1 --outputs <unpacked outputs/>
 

@@ -23,7 +23,7 @@ Frozen settings (must stay identical to the disagreement arm)
 - Parent selection is done by a SCRIPT, not by you or the subagent (this replaces runbook Step 6
   item 3 "seeded from top-3 survivors" and evosearch-iteration.md's "any prior iterations"):
   after round NN's iter_summary.json exists, run
-    .venv/bin/python3 scripts/tc1/select_parents.py select --rule top3 --iter-dir $RUN_DIR/iter_NN
+    .venv/bin/python3 scripts/tc1/parent_selection/select_parents.py select --rule top3 --iter-dir $RUN_DIR/iter_NN
   It writes iter_NN/selection.json with exactly 3 parents (ties broken by the script). Every
   iter_NN+1 candidate must be derived only from those parents (one or more of them each); never
   substitute, add, or reorder parents by judgment, and never use parents from older rounds.
@@ -36,14 +36,14 @@ Frozen settings (must stay identical to the disagreement arm)
   partial eval outputs, and re-run the whole round with identical flags. Tell me.
 - Subagent model: dispatch with NO model override, so it inherits this session's model (claude-sonnet-5).
 - Final code is chosen by the SCRIPT (replaces Step 7a's leaderboard pick / fallback check): when Stage 1
-  stops, run  .venv/bin/python3 scripts/tc1/select_parents.py best --run-dir $RUN_DIR
+  stops, run  .venv/bin/python3 scripts/tc1/parent_selection/select_parents.py best --run-dir $RUN_DIR
   and copy the code_path in RUN_DIR/best.json to evosearch_best_code.py (fallback_to_start_code=true means
   it is START_CODE).
 - Record parents: for every round N >= 1 write $RUN_DIR/iter_NN/parents.json:
   {"selection": "top3", "candidates": {"candidate_A": {"parents": ["iter_MM/candidate_X", ...],
    "parent_pass_rates": [..]}, ...}}
   then, BEFORE launching that round's eval, run
-    .venv/bin/python3 scripts/tc1/select_parents.py verify --iter-dir $RUN_DIR/iter_NN
+    .venv/bin/python3 scripts/tc1/parent_selection/select_parents.py verify --iter-dir $RUN_DIR/iter_NN
   and fix the candidates/parents.json until it prints OK.
 
 Isolation (runs must be independent)
@@ -61,7 +61,7 @@ Hardware (NTU TC1, 1 V100, 6 h SLURM job)
 
 Skill library is FROZEN
 - Nobody (you or the subagent) edits .claude/libero/skills/. Patterns go into findings.md only.
-- Run `bash scripts/tc1/skills_snapshot.sh check after_fixloop` in preflight and in the final report.
+- Run `bash scripts/tc1/common/skills_snapshot.sh check after_fixloop` in preflight and in the final report.
 
 Agents
 - Exactly ONE evosearch subagent (GPU: 0). No other agents (no Explore/Plan helpers).

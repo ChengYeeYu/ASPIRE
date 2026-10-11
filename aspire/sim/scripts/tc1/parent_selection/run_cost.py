@@ -8,7 +8,7 @@ Times come from the run's outputs: RUN_DIR stamp, each round's iter_summary.json
 Stage 2 manifest.
 
   # TC1, from aspire/sim
-  .venv/bin/python3 scripts/tc1/run_cost.py
+  .venv/bin/python3 scripts/tc1/parent_selection/run_cost.py
   # laptop, on unpacked archives
   python3 run_cost.py --claude-dir <dir with the *.jsonl sessions> --outputs <unpacked outputs/>
 

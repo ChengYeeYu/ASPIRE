@@ -3,8 +3,8 @@
 # against the original eval: wall time, per-trial time, timeouts, and per-(candidate, seed) pass/fail.
 # Results go to outputs/inspect/ only; the round itself is not touched.
 #
-#   bash scripts/tc1/bench_parallel.sh <ROUND_DIR> <PARALLEL> [candidate_X ...]   (default: all 8)
-#   e.g. bash scripts/tc1/bench_parallel.sh outputs/claude_evosearch_r2/libero_goal_swap/put_the_bowl_on_the_stove/20260929_105729/iter_04 4
+#   bash scripts/tc1/parent_selection/bench_parallel.sh <ROUND_DIR> <PARALLEL> [candidate_X ...]   (default: all 8)
+#   e.g. bash scripts/tc1/parent_selection/bench_parallel.sh outputs/claude_evosearch_r2/libero_goal_swap/put_the_bowl_on_the_stove/20260929_105729/iter_04 4
 #
 # Jupyter terminal (GPU node), Phase 1 env block, servers up, NO comparison run in progress.
 # Takes ~30-70 min. Watch GPU memory in a second terminal: nvidia-smi -l 30

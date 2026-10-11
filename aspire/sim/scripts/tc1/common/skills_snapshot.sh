@@ -1,9 +1,9 @@
 #!/bin/bash
 ### Freeze / restore the shared LIBERO skill library between comparison runs ###
-#   bash scripts/tc1/skills_snapshot.sh save    <name>   # copy .claude/libero/skills -> outputs/skill_snapshots/<name>
-#   bash scripts/tc1/skills_snapshot.sh restore <name>   # make .claude/libero/skills identical to the snapshot
-#   bash scripts/tc1/skills_snapshot.sh check   <name>   # exit 1 (and show the diff) if the library changed
-#   bash scripts/tc1/skills_snapshot.sh save-git <name> [rev]  # snapshot the library as committed at rev (default HEAD)
+#   bash scripts/tc1/common/skills_snapshot.sh save    <name>   # copy .claude/libero/skills -> outputs/skill_snapshots/<name>
+#   bash scripts/tc1/common/skills_snapshot.sh restore <name>   # make .claude/libero/skills identical to the snapshot
+#   bash scripts/tc1/common/skills_snapshot.sh check   <name>   # exit 1 (and show the diff) if the library changed
+#   bash scripts/tc1/common/skills_snapshot.sh save-git <name> [rev]  # snapshot the library as committed at rev (default HEAD)
 # Tiny file ops -- fine on the head node. Run from ~/ASPIRE/aspire/sim.
 set -euo pipefail
 

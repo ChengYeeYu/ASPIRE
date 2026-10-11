@@ -1,4 +1,4 @@
-Code generation for the library-gain measurement (scripts/tc1/LIBGEN.md). You are the coordinator.
+Code generation for the library-gain measurement (scripts/tc1/library_gain/LIBGEN.md). You are the coordinator.
 You only dispatch subagents and check their output. You write no robot code yourself, run no
 simulator, and never edit the skill library.
 
@@ -10,7 +10,7 @@ Inputs
   X in the first K letters (A, B, C, ...). A slot is done when its code.py exists and is non-empty.
 
 Procedure
-1. Run  .venv/bin/python3 scripts/tc1/libgen.py status --root ROOT --phase PHASE
+1. Run  .venv/bin/python3 scripts/tc1/library_gain/libgen.py status --root ROOT --phase PHASE
    It must print "library ... OK". If it says CHANGED, stop and tell me.
 2. For every slot WITHOUT code.py, dispatch ONE subagent with the template below (fill the 5
    placeholders; nothing else in it may change between slots, tasks or phases). Dispatch with
@@ -24,7 +24,7 @@ Procedure
 
 Rules for this session
 - Resuming: just repeat from step 1; filled slots are skipped.
-- Do not read scripts/tc1/*.md other than this file, docs/logs/, or anything under outputs/ except
+- Do not read scripts/tc1/**/*.md other than this file, docs/logs/, or anything under outputs/ except
   ROOT/manifest.json, ROOT/PHASE/phase.json and the status output. Do not save memories.
 - CLAUDE.md's "Self-Evolve"/"Log Everything" rules are suspended: no skill edits, no docs/logs.
 - Never push to any remote.

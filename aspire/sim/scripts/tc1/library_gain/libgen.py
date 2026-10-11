@@ -12,14 +12,14 @@ One ROOT holds one experiment over one suite (default 10 tasks):
 Phases: "before" (library L0), optionally "before_b" (L0 again = noise baseline),
 "after_<arm>" (library L1 from a fix loop on one task, that task excluded).
 
-  .venv-libero/bin/python3 scripts/tc1/libgen.py init  --root R --suite libero_goal_swap
-  .venv-libero/bin/python3 scripts/tc1/libgen.py probe --root R
-  .venv/bin/python3        scripts/tc1/libgen.py phase-start --root R --phase before --snapshot L0_clean
-  (codegen: claude "$(sed ... scripts/tc1/libgen_codegen_prompt.md)")
-  .venv/bin/python3        scripts/tc1/libgen.py status --root R --phase before
-  .venv-libero/bin/python3 scripts/tc1/libgen.py eval  --root R --phase before     # detached, resumable
-  .venv/bin/python3        scripts/tc1/libgen.py summarize --root R --phase before
-  .venv/bin/python3        scripts/tc1/libgen.py gain --root R --before before --after after_x [--noise before_b]
+  .venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py init  --root R --suite libero_goal_swap
+  .venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py probe --root R
+  .venv/bin/python3        scripts/tc1/library_gain/libgen.py phase-start --root R --phase before --snapshot L0_clean
+  (codegen: claude "$(sed ... scripts/tc1/library_gain/libgen_codegen_prompt.md)")
+  .venv/bin/python3        scripts/tc1/library_gain/libgen.py status --root R --phase before
+  .venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py eval  --root R --phase before     # detached, resumable
+  .venv/bin/python3        scripts/tc1/library_gain/libgen.py summarize --root R --phase before
+  .venv/bin/python3        scripts/tc1/library_gain/libgen.py gain --root R --before before --after after_x [--noise before_b]
 Run from aspire/sim.
 """
 from __future__ import annotations
@@ -33,10 +33,10 @@ import sys
 import time
 from pathlib import Path
 
-SIM = Path(__file__).resolve().parents[2]
+SIM = Path(__file__).resolve().parents[3]
 SKILLS = SIM / ".claude/libero/skills"
 SNAPSHOTS = SIM / "outputs/skill_snapshots"
-CODEGEN_PROMPT = SIM / "scripts/tc1/libgen_codegen_prompt.md"
+CODEGEN_PROMPT = SIM / "scripts/tc1/library_gain/libgen_codegen_prompt.md"
 EVAL = SIM / "scripts/libero/evosearch_eval.py"
 REPLAY = SIM / "scripts/libero/replay_trial.py"
 CONFIG = SIM / "env_configs/libero/franka_libero_traced.yaml"
@@ -182,7 +182,7 @@ def cmd_phase_start(a) -> None:
     snap = SNAPSHOTS / a.snapshot
     if not (snap / "SHA256SUMS").exists():
         sys.exit(f"no snapshot {snap}")
-    r = subprocess.run(["bash", "scripts/tc1/skills_snapshot.sh", "check", a.snapshot], cwd=SIM)
+    r = subprocess.run(["bash", "scripts/tc1/common/skills_snapshot.sh", "check", a.snapshot], cwd=SIM)
     if r.returncode != 0:
         sys.exit(f"skill library != snapshot {a.snapshot}: run skills_snapshot.sh restore {a.snapshot} first")
     for t in a.exclude:

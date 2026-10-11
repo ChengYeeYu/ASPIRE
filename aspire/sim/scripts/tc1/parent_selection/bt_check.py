@@ -4,7 +4,7 @@
   report  --iter-dir DIR | --logs DIR  which BT nodes failed, per candidate (dev) or over seeds (Stage 2)
 
 A valid candidate:
-  - contains the block from scripts/tc1/bt_lib.py verbatim (BT_LIB BEGIN .. END)
+  - contains the block from scripts/tc1/parent_selection/bt_lib.py verbatim (BT_LIB BEGIN .. END)
   - never calls move_to_joints / open_gripper / close_gripper / goto_home_joint_position itself
     (motion only via bt_move / bt_move_pose / bt_open / bt_close, which raise outside an Action)
   - gives every Action(...) a check that is not None and not a constant (lambda bb: True)
@@ -50,7 +50,7 @@ def verify_file(path):
     code = path.read_text()
     block = lib_block()
     if block not in code:
-        errs.append("BT_LIB block missing or edited (paste scripts/tc1/bt_lib.py verbatim)")
+        errs.append("BT_LIB block missing or edited (paste scripts/tc1/parent_selection/bt_lib.py verbatim)")
         rest = code
     else:
         rest = code.replace(block, "")

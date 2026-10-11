@@ -1,4 +1,4 @@
-# ===== BT_LIB BEGIN (paste verbatim from scripts/tc1/bt_lib.py; bt_check.py verifies) =====
+# ===== BT_LIB BEGIN (paste verbatim from scripts/tc1/parent_selection/bt_lib.py; bt_check.py verifies) =====
 # Minimal behaviour tree for evosearch_bt candidates. Every Action has a check, written by the
 # candidate, that tests the action's effect; a failed check re-runs the action (retries) within the
 # step and time budget. Motion only through bt_move / bt_move_pose / bt_open / bt_close, inside an Action.

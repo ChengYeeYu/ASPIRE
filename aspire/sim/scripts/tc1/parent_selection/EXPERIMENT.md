@@ -32,7 +32,7 @@ cd ~/ASPIRE && git pull
 # TC1 head node
 module load slurm && cd ~/ASPIRE/aspire/sim
 squeue -u $USER                                          # no old session still running (else scancel it)
-sbatch scripts/tc1/04_session.sh
+sbatch scripts/tc1/setup/04_session.sh
 squeue -u $USER                                          # wait for R; note <jobid>
 grep -m1 'node ip' logs/error_aspire-session_<jobid>.err
 grep -m1 -o 'http://[0-9.]*:8891/lab?token=[a-z0-9]*' logs/error_aspire-session_<jobid>.err
@@ -58,7 +58,7 @@ for p in 8114 8115 8116; do echo -n "$p: "; curl -s -o /dev/null -w '%{http_code
 
 ## Phase 2: fix loop (the shared starting point) -- DONE 28 Sep 2026
 ```bash
-claude "$(cat scripts/tc1/fixloop_prompt.md)"          # first run AND every resume
+claude "$(cat scripts/tc1/parent_selection/fixloop_prompt.md)"          # first run AND every resume
 ```
 ```bash
 # done when both succeed
@@ -68,7 +68,7 @@ cat $T/validation_result.json                            # pass_rate = BASELINE_
 ```
 ```bash
 # freeze the starting point (once, Jupyter terminal)
-bash scripts/tc1/skills_snapshot.sh save after_fixloop
+bash scripts/tc1/common/skills_snapshot.sh save after_fixloop
 chmod a-w $T/fix_code.py $T/validation_result.json
 mkdir -p ~/archive
 tar czf ~/archive/fixloop_$(date +%Y%m%d).tgz outputs/libero_fix_loop outputs/libero_fix_loop_eval \
@@ -86,14 +86,14 @@ Never rerun the fix loop on this task.
 ARM=evosearch        # or: disagreement
 REP=2                # next unused repetition
 rm -rf outputs/skill_snapshots/after_fixloop/.ipynb_checkpoints .claude/libero/skills/.ipynb_checkpoints
-bash scripts/tc1/skills_snapshot.sh restore after_fixloop
-bash scripts/tc1/skills_snapshot.sh check after_fixloop             # OK
+bash scripts/tc1/common/skills_snapshot.sh restore after_fixloop
+bash scripts/tc1/common/skills_snapshot.sh check after_fixloop             # OK
 ls ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null        # empty/absent, else: mv it to ~/archive/<name>_memory
 ls docs/logs/                                                       # only .gitkeep, else move the logs to ~/archive/
 git -C ~/ASPIRE status --short -- '*.md'                            # only skills grasp.md/transport.md + docs/progress (expected)
 ls -d outputs/claude_${ARM}_r${REP} 2>/dev/null                     # must NOT exist yet
-grep -c setsid scripts/tc1/evosearch_prompt.md                      # >= 1 (latest prompt pulled)
-claude --model claude-sonnet-5 "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)"
+grep -c setsid scripts/tc1/parent_selection/evosearch_prompt.md                      # >= 1 (latest prompt pulled)
+claude --model claude-sonnet-5 "$(sed "s/{{REP}}/$REP/g" scripts/tc1/parent_selection/${ARM}_prompt.md)"
 ```
 Check the preflight before saying "go":
 - BASELINE_RATE 4% (2/50), START_CODE = fix-loop `fix_code.py`
@@ -126,12 +126,12 @@ ARM=evosearch; REP=2
 R=$(ls -d outputs/claude_${ARM}_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/2*/ | tail -1)
 # unfinished round: keep it if its 8 candidates + parents.json verify (re-run its eval only), else set it aside
 for d in $R/iter_*/; do [ -f $d/iter_summary.json ] && continue
-  if [ $(ls $d/candidate_*/code.py 2>/dev/null | wc -l) -eq 8 ] && { [ $(basename $d) = iter_00 ] || .venv/bin/python3 scripts/tc1/select_parents.py verify --iter-dir $d; }; then
+  if [ $(ls $d/candidate_*/code.py 2>/dev/null | wc -l) -eq 8 ] && { [ $(basename $d) = iter_00 ] || .venv/bin/python3 scripts/tc1/parent_selection/select_parents.py verify --iter-dir $d; }; then
     mv $d/eval.log $d/eval_crashed_$(date +%H%M).log 2>/dev/null; rm -rf $d/candidate_*/eval $d/candidate_*/eval_results.json; echo "KEEP $d (re-evaluate)"
   else mv $d ${d%/}_partial_$(date +%H%M); echo "SET ASIDE $d"; fi; done
-bash scripts/tc1/skills_snapshot.sh check after_fixloop
+bash scripts/tc1/common/skills_snapshot.sh check after_fixloop
 ls $R; ls outputs/claude_${ARM}_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove/
-claude --model claude-sonnet-5 "$(sed "s/{{REP}}/$REP/g" scripts/tc1/${ARM}_prompt.md)
+claude --model claude-sonnet-5 "$(sed "s/{{REP}}/$REP/g" scripts/tc1/parent_selection/${ARM}_prompt.md)
 
 RESUMING NOW (unattended, I'm away -- never stop to ask; make the protocol-compliant choice and note it):
 - RUN_DIR $R: rounds with iter_summary.json are complete. Any iter_*_partial_* is a discarded interrupted attempt -- ignore it.
@@ -153,10 +153,10 @@ H=outputs/aspire_${ARM}_eval_r${REP}/libero_goal_swap/put_the_bowl_on_the_stove
 ls $H/runs/                                                         # exactly ONE run id (absent = fallback to fix_code)
 grep -h -E '"passes"|"trials"|"status"' $H/runs/*/manifest.json     # "complete", passes/50
 grep -h -A16 '"trial_seeds"' $E/2*/iter_*/iter_summary.json | grep -oE '\b[0-9]+\b' | sort -un | tr '\n' ' '; echo   # only 51..65
-for d in $E/2*/iter_0[1-9]; do .venv/bin/python3 scripts/tc1/select_parents.py verify --iter-dir $d; done   # every round OK
-bash scripts/tc1/skills_snapshot.sh check after_fixloop             # OK
+for d in $E/2*/iter_0[1-9]; do .venv/bin/python3 scripts/tc1/parent_selection/select_parents.py verify --iter-dir $d; done   # every round OK
+bash scripts/tc1/common/skills_snapshot.sh check after_fixloop             # OK
 ls docs/logs/ ~/.claude/projects/*ASPIRE-aspire-sim/memory/ 2>/dev/null   # nothing new
-.venv/bin/python3 scripts/tc1/run_cost.py --json ~/archive/run_cost_$(date +%Y%m%d).json   # time + tokens, all runs so far
+.venv/bin/python3 scripts/tc1/parent_selection/run_cost.py --json ~/archive/run_cost_$(date +%Y%m%d).json   # time + tokens, all runs so far
 ```
 ### (e) archive (Jupyter terminal, before scancel)
 ```bash
@@ -232,7 +232,7 @@ only), and tells the agent not to open EXPERIMENT.md / FINDINGS.md / TC1_NOTES.m
   already chosen; ties: more passes, then name. Too few eligible -> fill by most passes (= top3).
 - Why the floor: without it a 0/15 candidate is "most different" from a strong one just by failing
   (on r1 iter_01 it would pick B 0/15). Budget is unchanged: 8 candidates x max 5 rounds per arm.
-- Dry run on any finished run: `.venv/bin/python3 scripts/tc1/select_parents.py compare --run-dir $RUN_DIR`.
+- Dry run on any finished run: `.venv/bin/python3 scripts/tc1/parent_selection/select_parents.py compare --run-dir $RUN_DIR`.
   On r1: iter_00 same as top3 (nobody but the best reaches 3/15); iter_01 G C F vs top3 G C A;
   iter_02 F E C vs top3 F B A.
 - The prompt only describes what the rule does. No "learn from the complementary failures" motivation
