@@ -184,7 +184,8 @@ lasting source for token numbers: `run_cost.py --claude-dir <unpacked dir> --out
 | 3 | disagreement | 1 | DONE (46%); rule never changed the parent set (FINDINGS.md F7) |
 | 4 | disagreement | 2 | |
 | 5-6 | disagreement -> evosearch | 3 | optional |
-| 7 | evosearch_agent | 1 | next: original ASPIRE, parents and final pick chosen by the agent (like r1); prompt `evosearch_agent_prompt.md` |
+| 7 | evosearch_agent | 1 | DONE 9-10 Oct (0/50): original ASPIRE, parents and final pick chosen by the agent (like r1); prompt `evosearch_agent_prompt.md` |
+| 8 | evosearch_bt | 1 | next: as evosearch_agent, but every new candidate is a behaviour tree with a check on every action node; prompt `evosearch_bt_prompt.md` |
 
 Evosearch reached 98% held-out here, so final rates can't separate the arms on this task: compare
 rounds-to->=80%, per-round best/mean, and parent rates (`parents.json`) across repetitions -- or move
@@ -204,6 +205,26 @@ in the write-up. Run it with `ARM=evosearch_agent REP=1` in Phase 3, with these 
   keep an unfinished round if it has 8 candidates and a parents.json.
 - (d) skip the `select_parents.py verify` loop; check every `iter_0[1-9]/parents.json` exists instead.
   `best.json` is the script's pick for reference; Stage 2 used `evosearch_best_code.py` (agent pick).
+
+## evosearch_bt arm (behaviour trees with per-action checks)
+Same as evosearch_agent (agent picks parents and final code, `--parallel-per-gpu 4`); the only change is
+the code form. Every candidate except iter_00/candidate_A (START_CODE) pastes the block from
+`bt_lib.py` verbatim and runs the task as a tree (`Sequence`/`Fallback`/`Retry`/`Action`/`Condition`/`Do`,
+entry `run_tree(root)`). Each `Action` must have a check of its own effect: at least `joints_reached` for
+moves (joint space, avoids the robot-base frame offset), `gripper_is_open`, `gripper_holding` (threshold
+0.045 on `robot_joint_pos[-1]`: every passing held-out trial in earlier runs read >= 0.061 after the
+close, empty closes ~0.00-0.03). A failed check re-runs the action within the 4000-step / 160 s budget;
+no motion after the tree ends, so no "proceed anyway". Why: in evosearch_agent r1, 37/50 held-out
+trials carried an empty gripper to the stove after the grasp check failed twice, and r2 / disagreement r1
+lost 15 / 14 trials to moves that stopped ~14 cm short (`move_to_joints` gives up after 120 steps).
+- Gates: `bt_check.py verify --iter-dir $RUN_DIR/iter_NN` OK before each eval; `bt_check.py report
+  --iter-dir ...` after each eval (which nodes fail) into findings.md; `report --logs <stage2 logs>` at the end.
+- `bt_lib.py` and `bt_check.py` are frozen during a run, like the skill library.
+- Compare with evosearch_agent r1 (same everything except the code form). Caveat: a BT can only retry
+  the strategy it has; if the grasp itself fails ~90% (as in evosearch_agent r1), checks turn silent
+  failures into early FAILURE but need a better grasp to pass.
+- Run with `ARM=evosearch_bt REP=1` in Phase 3; (c)/(d) differences as for evosearch_agent, plus the
+  bt_check gates above.
 
 ## Disagreement rule (`select_disagreement`, decided 29 Sep 2026)
 - Parent 1: most passes. Parents 2-3: among candidates passing >= `MIN_PASS_PCT` = 20% of the round's
