@@ -3,6 +3,8 @@
 # candidate, that tests the action's effect; a failed check re-runs the action (retries) within the
 # step and time budget. Motion only through bt_move / bt_move_pose / bt_open / bt_close, inside an Action.
 # Node functions take the blackboard dict `bb` (shared state written and read by the nodes).
+# Custom nodes: any class with tick(bb) -> SUCCESS/FAILURE; it may tick children and call bt_fail,
+# but never touches _bt* names (bt_check.py rejects that) and moves only through Action children.
 import time as _bt_time
 
 import numpy as _bt_np
@@ -147,6 +149,11 @@ def _bt_fail(name, tries, why):
     _bt["fails"].append(name)
     print(f"[BT] {name}: FAIL ({why}, tries={tries})", flush=True)
     return FAILURE
+
+
+def bt_fail(name, tries, why):
+    """For custom nodes: report a FAILURE in the same [BT] format and return FAILURE."""
+    return _bt_fail(name, tries, why)
 
 
 def run_tree(root, bb=None):

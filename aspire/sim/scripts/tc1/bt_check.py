@@ -9,6 +9,7 @@ A valid candidate:
     (motion only via bt_move / bt_move_pose / bt_open / bt_close, which raise outside an Action)
   - gives every Action(...) a check that is not None and not a constant (lambda bb: True)
   - calls run_tree(...) and no bt_* motion at module level
+  - never references BT_LIB internals (_bt*); custom node classes are allowed
   - uses none of the forbidden simulator APIs
 iter_00/candidate_A is START_CODE verbatim and is skipped.
 """
@@ -62,6 +63,8 @@ def verify_file(path):
         return errs + [f"syntax error: {e}"]
     run_tree_calls = 0
     for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id.startswith("_bt"):
+            errs.append(f"line {node.lineno}: {node.id} is BT_LIB internal state (custom nodes use bt_fail / Action)")
         if not isinstance(node, ast.Call):
             continue
         name = call_name(node)
