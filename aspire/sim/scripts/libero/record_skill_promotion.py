@@ -67,10 +67,8 @@ def skill_files(root: Path) -> list[Path]:
     skills = root / SKILLS_REL
     if not skills.is_dir():
         raise FileNotFoundError(f"skill library does not exist: {skills}")
-    files = sorted(path for path in skills.rglob("*") if path.is_file())
-    if not files:
-        raise FileNotFoundError(f"skill library is empty: {skills}")
-    return files
+    # An empty library is valid: a library may be built from nothing (scripts/tc1/task_selection).
+    return sorted(path for path in skills.rglob("*") if path.is_file())
 
 
 def skill_hashes(root: Path) -> dict[str, str]:

@@ -6,8 +6,10 @@ Inputs
 - ROOT  = {{ROOT}}
 - PHASE = {{PHASE}}
 - ROOT/manifest.json (suite, K, seeds) and ROOT/PHASE/phase.json (tasks of this phase) already exist.
-- Every slot to fill is ROOT/PHASE/<task>/candidate_<X>/ for each task in phase.json "tasks" and
+- Every slot to fill is ROOT/PHASE/<id>/candidate_<X>/ for each task id in phase.json "tasks" and
   X in the first K letters (A, B, C, ...). A slot is done when its code.py exists and is non-empty.
+- A task id is <suite>/<task>: SUITE is the part before the first "/", TASK the rest.
+  Its scene probe is ROOT/probe/<id>.txt.
 
 Procedure
 1. Run  .venv/bin/python3 scripts/tc1/library_gain/libgen.py status --root ROOT --phase PHASE
@@ -41,6 +43,7 @@ Read, in this order, and nothing else:
 1. CLAUDE.md -- only the FORBIDDEN APIs and ALLOWED APIs sections.
 2. .claude/libero/api-reference.md
 3. Every file in .claude/libero/skills/ (the skill library -- reuse its helpers and patterns).
+   The library may be empty; then write the program from the API alone.
 4. The scene probe file above: task language, SAM3 detections, 3D centres/extents on ONE seed.
 5. If you need exact signatures: cap/integrations/franka/libero_reduced_skill_library.py and
    cap/integrations/franka/libero_reduced.py.

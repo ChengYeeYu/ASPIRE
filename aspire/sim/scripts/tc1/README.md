@@ -9,6 +9,7 @@ All scripts assume the repo is cloned at `~/ASPIRE` and are run from `~/ASPIRE/a
 | [common/](common/) | `skills_snapshot.sh`: save / restore / check / save-git the skill library (used by both experiments) |
 | [parent_selection/](parent_selection/) | One task (`put_the_bowl_on_the_stove`): fix loop, then evosearch vs disagreement / agent-chosen / behaviour-tree parent selection. Runbook + results: `EXPERIMENT.md`, analysis: `FINDINGS.md` |
 | [library_gain/](library_gain/) | One suite (`libero_goal_swap`, 10 tasks): how much a skill-library update raises zero-shot success on the other tasks. Runbook: `LIBGEN.md` |
+| [task_selection/](task_selection/) | 9 tasks over goal/spatial/object swap, library built from empty: which task to fix next, disagreement vs top-to-bottom, 3 rounds. Runbook: `TASKSEL.md` (uses `library_gain/libgen.py` for codegen + eval) |
 
 ## Setup jobs
 

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """Library-gain measurement: how much does a skill-library update help the OTHER tasks?
 
-One ROOT holds one experiment over one suite (default 10 tasks):
-  ROOT/manifest.json                        suite, tasks, K, seeds, probe seed  (init)
-  ROOT/probe/<task>.txt                     scripted scene probe, shared by all phases (probe)
+One ROOT holds one experiment over a task list (default: 10 tasks of one suite). A task id is
+"<suite>/<task>", so one ROOT may mix suites:
+  ROOT/manifest.json                        tasks, K, seeds, probe seed  (init)
+  ROOT/probe/<id>.txt                       scripted scene probe, shared by all phases (probe)
   ROOT/<phase>/phase.json                   library snapshot + sha, excluded tasks (phase-start)
-  ROOT/<phase>/<task>/candidate_X/code.py   written by codegen subagents (libgen_codegen_prompt.md)
-  ROOT/<phase>/<task>/iter_summary.json     written by evosearch_eval.py (eval)
+  ROOT/<phase>/<id>/candidate_X/code.py     written by codegen subagents (libgen_codegen_prompt.md)
+  ROOT/<phase>/<id>/iter_summary.json       written by evosearch_eval.py (eval)
   ROOT/<phase>/summary.json                 per-task rates + disagreement (summarize)
 
 Phases: "before" (library L0), optionally "before_b" (L0 again = noise baseline),
 "after_<arm>" (library L1 from a fix loop on one task, that task excluded).
 
-  .venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py init  --root R --suite libero_goal_swap
+  .venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py init  --root R --suite libero_goal_swap [--tasks <suite>/<task> ...]
   .venv-libero/bin/python3 scripts/tc1/library_gain/libgen.py probe --root R
   .venv/bin/python3        scripts/tc1/library_gain/libgen.py phase-start --root R --phase before --snapshot L0_clean
   (codegen: claude "$(sed ... scripts/tc1/library_gain/libgen_codegen_prompt.md)")
@@ -45,6 +46,8 @@ LIBERO_PY = SIM / ".venv-libero/bin/python3"
 PROBE_PROMPTS = [
     "bowl", "black bowl", "plate", "stove", "cabinet", "drawer", "top drawer", "middle drawer",
     "wine bottle", "rack", "wine rack", "cream cheese", "mug", "basket", "box", "bottle",
+    "ramekin", "cookie box", "alphabet soup", "salad dressing", "tomato sauce", "ketchup",
+    "bbq sauce", "butter", "milk", "chocolate pudding", "orange juice",
 ]
 
 
@@ -61,6 +64,14 @@ def _manifest(root: Path) -> dict:
     if not p.exists():
         sys.exit(f"no {p} -- run init first")
     return _load(p)
+
+
+def _split(tid: str) -> tuple[str, str]:
+    """Task id "<suite>/<task>" -> (suite, task)."""
+    suite, _, task = tid.partition("/")
+    if not task:
+        sys.exit(f"task id {tid!r} is not <suite>/<task>")
+    return suite, task
 
 
 def _candidates(k: int) -> list[str]:
@@ -92,18 +103,32 @@ def cmd_init(a) -> None:
     root = a.root
     if (root / "manifest.json").exists():
         sys.exit(f"{root}/manifest.json exists, refusing to overwrite")
-    tasks = a.tasks
+    from libero import benchmark as libero_benchmark  # needs .venv-libero
+    bench = libero_benchmark.get_benchmark_dict()
+    names: dict[str, list[str]] = {}
+
+    def suite_tasks(suite: str) -> list[str]:
+        if suite not in names:
+            if suite not in bench:
+                sys.exit(f"unknown suite {suite!r}")
+            b = bench[suite]()
+            names[suite] = [b.get_task(i).name for i in range(b.n_tasks)]
+        return names[suite]
+
+    tasks = [t if "/" in t else f"{a.suite}/{t}" for t in a.tasks or []]
     if not tasks:
-        from libero import benchmark as libero_benchmark  # needs .venv-libero
-        suite = libero_benchmark.get_benchmark_dict()[a.suite]()
-        tasks = [suite.get_task(i).name for i in range(suite.n_tasks)]
+        tasks = [f"{a.suite}/{t}" for t in suite_tasks(a.suite)]
     tasks = tasks[: a.max_tasks]
+    for t in tasks:
+        suite, task = _split(t)
+        if task not in suite_tasks(suite):
+            sys.exit(f"{task!r} is not a task of {suite}")
     seeds = _parse_seeds(a.seeds)
     if a.probe_seed in seeds:
         sys.exit("probe seed must not be one of the measurement seeds")
     root.mkdir(parents=True, exist_ok=True)
     _write(root / "manifest.json", {
-        "suite": a.suite, "tasks": tasks, "k": a.k, "seeds": seeds,
+        "tasks": tasks, "k": a.k, "seeds": seeds,
         "probe_seed": a.probe_seed, "created": time.strftime("%Y-%m-%d %H:%M:%S"),
     })
     print(f"{root}/manifest.json: {len(tasks)} tasks, K={a.k}, seeds {seeds[0]}..{seeds[-1]}")
@@ -147,27 +172,29 @@ def cmd_probe(a) -> None:
     out.mkdir(exist_ok=True)
     body = out / "_probe_body.py"
     body.write_text(f"PROMPTS = {PROBE_PROMPTS!r}\n" + PROBE_BODY)
-    for task in m["tasks"]:
-        dst = out / f"{task}.txt"
+    for tid in m["tasks"]:
+        suite, task = _split(tid)
+        dst = out / f"{tid}.txt"
+        dst.parent.mkdir(parents=True, exist_ok=True)
         if dst.exists() and "PROBE_DONE" in dst.read_text():
-            print(f"skip (done): {task}")
+            print(f"skip (done): {tid}")
             continue
-        print(f"probing {task} on seed {m['probe_seed']} ...", flush=True)
-        cmd = [str(LIBERO_PY), str(REPLAY), "--args.suite", m["suite"], "--args.task", task,
+        print(f"probing {tid} on seed {m['probe_seed']} ...", flush=True)
+        cmd = [str(LIBERO_PY), str(REPLAY), "--args.suite", suite, "--args.task", task,
                "--args.trial", str(m["probe_seed"]), "--args.interactive",
-               "--args.config", str(CONFIG), "--args.output-dir", str(out / f"_replay_{task}")]
+               "--args.config", str(CONFIG), "--args.output-dir", str(out / "_replay" / tid)]
         r = subprocess.run(cmd, input=f"exec(open({str(body)!r}).read())\n", text=True,
                            capture_output=True, cwd=SIM, timeout=900)
         keep = [ln for ln in r.stdout.splitlines()
                 if ln.startswith(("TASK_LANGUAGE:", "EEF_POSE:", "PROBE_DONE"))
                 or any(ln.startswith(p + ":") for p in PROBE_PROMPTS)]
-        header = (f"# Scene probe: {m['suite']} / {task}, seed {m['probe_seed']} (not a measurement seed)\n"
+        header = (f"# Scene probe: {suite} / {task}, seed {m['probe_seed']} (not a measurement seed)\n"
                   f"# SAM3 text prompts on the agentview image at reset; top 3 masks each; world frame, metres.\n"
                   f"# Positions differ per seed -- localise at run time, never hard-code these numbers.\n")
         dst.write_text(header + "\n".join(keep) + "\n")
         if "PROBE_DONE" not in keep:
-            (out / f"{task}.err.log").write_text(r.stdout[-20000:] + "\n--- stderr ---\n" + r.stderr[-20000:])
-            print(f"  FAILED (see probe/{task}.err.log)")
+            (out / f"{tid}.err.log").write_text(r.stdout[-20000:] + "\n--- stderr ---\n" + r.stderr[-20000:])
+            print(f"  FAILED (see probe/{tid}.err.log)")
         else:
             print(f"  ok: {keep[0]}")
 
@@ -216,12 +243,13 @@ def cmd_status(a) -> None:
     lib_ok = _library_sha() == ph["library_sha"]
     print(f"phase {a.phase}: library {ph['snapshot']} {'OK' if lib_ok else 'CHANGED (!)'}")
     n_code = n_eval = 0
+    w = max(map(len, ph["tasks"]))
     for t in ph["tasks"]:
         have = [c[-1] for c in _candidates(m["k"]) if (a.root / a.phase / t / c / "code.py").exists()]
         done = (a.root / a.phase / t / "iter_summary.json").exists()
         n_code += len(have)
         n_eval += done
-        print(f"  {t:<55} code {''.join(have) or '-':<{m['k']}}  {'evaluated' if done else ''}")
+        print(f"  {t:<{w}} code {''.join(have) or '-':<{m['k']}}  {'evaluated' if done else ''}")
     print(f"code {n_code}/{len(ph['tasks']) * m['k']}, evaluated tasks {n_eval}/{len(ph['tasks'])}")
     if not lib_ok:
         sys.exit(1)
@@ -247,7 +275,8 @@ def cmd_eval(a) -> None:
             if (tdir / c / "eval").exists():
                 (tdir / c / "eval").rename(tdir / c / f"eval_partial_{stamp}")
         print(f"[{time.strftime('%H:%M:%S')}] eval {t}", flush=True)
-        cmd = [str(LIBERO_PY), str(EVAL), "--iter-dir", str(tdir), "--suite", m["suite"], "--task", t,
+        suite, task = _split(t)
+        cmd = [str(LIBERO_PY), str(EVAL), "--iter-dir", str(tdir), "--suite", suite, "--task", task,
                "--trials", str(len(seeds)), "--trial-seeds", *seeds, "--config", str(CONFIG),
                "--sim-gpus", *[str(g) for g in a.sim_gpus], "--parallel-per-gpu", str(a.parallel_per_gpu),
                "--no-highlights"]
@@ -277,6 +306,8 @@ def _task_stats(summary: dict, seeds: list[int]) -> dict:
         "seed_disagreement": round(sum(0 < n < k for n in n_pass_per_seed) / len(seeds), 4),
         "rates": dict(sorted(rates.items())),
         "errors": sum(c["errors"] for c in cands),
+        # per program, one character per seed (in "seeds" order): 1 = pass, 0 = fail
+        "pass_matrix": {c: "".join("1" if s in passed[c] else "0" for s in seeds) for c in sorted(passed)},
     }
 
 
@@ -297,10 +328,11 @@ def cmd_summarize(a) -> None:
     s = _summarize(a.root, a.phase)
     _write(a.root / a.phase / "summary.json", s)
     print(f"phase {a.phase} (library {s['snapshot']}, K={s['k']}, {len(s['seeds'])} seeds)")
-    print(f"  {'task':<55} {'mean':>5} {'best':>5} {'any':>5} {'disagr':>6}  per-candidate")
+    w = max(map(len, s["tasks"]))
+    print(f"  {'task':<{w}} {'mean':>5} {'best':>5} {'any':>5} {'disagr':>6}  per-candidate")
     for t, st in s["tasks"].items():
         per = " ".join(f"{r:.0%}" for r in st["rates"].values())
-        print(f"  {t:<55} {st['mean_rate']:>5.0%} {st['best_rate']:>5.0%} {st['any_pass_rate']:>5.0%} "
+        print(f"  {t:<{w}} {st['mean_rate']:>5.0%} {st['best_rate']:>5.0%} {st['any_pass_rate']:>5.0%} "
               f"{st['seed_disagreement']:>6.0%}  {per}")
     print(f"  mean over tasks: {s['mean_rate_over_tasks']:.1%}   -> {a.root / a.phase / 'summary.json'}")
 
@@ -316,14 +348,15 @@ def cmd_gain(a) -> None:
     rows, deltas, nds = [], [], []
     print(f"gain: {a.after} ({after['snapshot']}) minus {a.before} ({before['snapshot']}); "
           f"excluded {sorted(excluded) or 'none'}")
-    hdr = f"  {'task':<55} {'before':>6} {'after':>6} {'delta':>6}"
+    w = max(map(len, tasks))
+    hdr = f"  {'task':<{w}} {'before':>6} {'after':>6} {'delta':>6}"
     print(hdr + (f" {'noise':>6}" if noise else ""))
     for t in tasks:
         b, f_ = before["tasks"][t]["mean_rate"], after["tasks"][t]["mean_rate"]
         d = f_ - b
         deltas.append(d)
         row = {"task": t, "before": b, "after": f_, "delta": round(d, 4)}
-        line = f"  {t:<55} {b:>6.0%} {f_:>6.0%} {d:>+6.0%}"
+        line = f"  {t:<{w}} {b:>6.0%} {f_:>6.0%} {d:>+6.0%}"
         if noise and t in noise["tasks"]:
             nd = noise["tasks"][t]["mean_rate"] - b
             nds.append(nd)
@@ -342,7 +375,7 @@ def cmd_gain(a) -> None:
         out["noise_mean_delta"] = round(sum(nds) / len(nds), 4)
         print(f"  noise ({a.noise} vs {a.before}, same library): mean {out['noise_mean_delta']:+.1%}, "
               f"mean |delta| per task {out['noise_mean_abs_delta']:.1%}")
-    dst = a.root / f"gain_{a.after}.json"
+    dst = a.root / f"gain_{a.after.replace('/', '__')}.json"
     _write(dst, out)
     print(f"  -> {dst}")
 
@@ -353,8 +386,9 @@ def main() -> None:
 
     p = sp.add_parser("init")
     p.add_argument("--root", type=Path, required=True)
-    p.add_argument("--suite", default="libero_goal_swap")
-    p.add_argument("--tasks", nargs="*", help="default: all tasks of the suite (needs .venv-libero)")
+    p.add_argument("--suite", default="libero_goal_swap", help="suite for --tasks given without a suite/ prefix")
+    p.add_argument("--tasks", nargs="*", help="<suite>/<task> ids; default: all tasks of --suite. "
+                   "Checked against the installed suites (needs .venv-libero)")
     p.add_argument("--max-tasks", type=int, default=10)
     p.add_argument("--k", type=int, default=4, help="programs per task")
     p.add_argument("--seeds", default="1-10", help="measurement seeds, '1-10' or '1,2,3'")

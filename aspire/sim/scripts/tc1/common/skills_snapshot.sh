@@ -4,6 +4,7 @@
 #   bash scripts/tc1/common/skills_snapshot.sh restore <name>   # make .claude/libero/skills identical to the snapshot
 #   bash scripts/tc1/common/skills_snapshot.sh check   <name>   # exit 1 (and show the diff) if the library changed
 #   bash scripts/tc1/common/skills_snapshot.sh save-git <name> [rev]  # snapshot the library as committed at rev (default HEAD)
+#   bash scripts/tc1/common/skills_snapshot.sh save-empty <name>      # snapshot of an empty library (no skill files at all)
 # Tiny file ops -- fine on the head node. Run from ~/ASPIRE/aspire/sim.
 set -euo pipefail
 
@@ -18,7 +19,7 @@ case "$cmd" in
     [[ -e "$snap" ]] && { echo "snapshot exists, refusing to overwrite: $snap"; exit 1; }
     mkdir -p "$snap"
     cp -a "$skills/." "$snap/"
-    (cd "$snap" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+    (cd "$snap" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS)
     echo "saved $skills -> $snap ($(wc -l < "$snap/SHA256SUMS") files)"
     ;;
   save-git)
@@ -26,12 +27,21 @@ case "$cmd" in
     [[ -e "$snap" ]] && { echo "snapshot exists, refusing to overwrite: $snap"; exit 1; }
     mkdir -p "$snap"
     git -C "$(git rev-parse --show-toplevel)" archive "$rev:$(git rev-parse --show-prefix)$skills" | tar -x -C "$snap"   # -C: archive from a subdir only sees the subdir
-    (cd "$snap" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+    (cd "$snap" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS)
     echo "saved $skills @ $(git rev-parse --short "$rev") -> $snap ($(wc -l < "$snap/SHA256SUMS") files)"
+    ;;
+  save-empty)
+    [[ -e "$snap" ]] && { echo "snapshot exists, refusing to overwrite: $snap"; exit 1; }
+    mkdir -p "$snap" && : > "$snap/SHA256SUMS"
+    echo "saved empty library -> $snap"
     ;;
   restore)
     [[ -f "$snap/SHA256SUMS" ]] || { echo "no snapshot: $snap"; exit 1; }
-    (cd "$snap" && sha256sum --quiet -c SHA256SUMS) || { echo "snapshot corrupted: $snap"; exit 1; }
+    if [[ -s "$snap/SHA256SUMS" ]]; then   # empty SHA256SUMS = empty library (sha256sum -c rejects an empty list)
+      (cd "$snap" && sha256sum --quiet -c SHA256SUMS) || { echo "snapshot corrupted: $snap"; exit 1; }
+    elif [[ -n "$(find "$snap" -type f ! -name SHA256SUMS)" ]]; then
+      echo "snapshot corrupted: $snap"; exit 1
+    fi
     find "$skills" -mindepth 1 -delete
     cp -a "$snap/." "$skills/"
     rm -f "$skills/SHA256SUMS"
