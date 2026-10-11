@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import string
 import subprocess
 import sys
@@ -138,13 +139,14 @@ def cmd_init(a) -> None:
 
 PROBE_BODY = """
 import numpy as np
-print("TASK_LANGUAGE:", env.handle.task_language, flush=True)
+# in the REPL `env` is the code env; programs see its low_level_env as `env`
+print("TASK_LANGUAGE:", getattr(env, "low_level_env", env).handle.task_language, flush=True)
 _o = get_observation()
 _rgb = _o["agentview"]["images"]["rgb"]
 _d = _o["agentview"]["images"]["depth"]
 _d = _d[:, :, 0] if _d.ndim == 3 else _d
 _K, _T = _o["agentview"]["intrinsics"], _o["agentview"]["pose_mat"]
-print("EEF_POSE:", np.round(np.asarray(_o["robot"]["eef_pose"]), 3).tolist(), flush=True)
+print("EEF_POSE: (robot base frame: x y z, quat wxyz, gripper)", np.round(np.asarray(_o["robot_cartesian_pos"]), 3).tolist(), flush=True)
 for _p in PROMPTS:
     try:
         _ms = segment_sam3_text_prompt(_rgb, _p)
@@ -185,7 +187,8 @@ def cmd_probe(a) -> None:
                "--args.config", str(CONFIG), "--args.output-dir", str(out / "_replay" / tid)]
         r = subprocess.run(cmd, input=f"exec(open({str(body)!r}).read())\n", text=True,
                            capture_output=True, cwd=SIM, timeout=900)
-        keep = [ln for ln in r.stdout.splitlines()
+        lines = [re.sub(r"^(?:(?:>>>|\.\.\.) )+", "", ln) for ln in r.stdout.splitlines()]  # strip REPL prompts
+        keep = [ln for ln in lines
                 if ln.startswith(("TASK_LANGUAGE:", "EEF_POSE:", "PROBE_DONE"))
                 or any(ln.startswith(p + ":") for p in PROBE_PROMPTS)]
         header = (f"# Scene probe: {suite} / {task}, seed {m['probe_seed']} (not a measurement seed)\n"
