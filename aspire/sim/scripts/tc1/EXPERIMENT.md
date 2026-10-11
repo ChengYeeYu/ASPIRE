@@ -210,19 +210,19 @@ in the write-up. Run it with `ARM=evosearch_agent REP=1` in Phase 3, with these 
 Same as evosearch_agent (agent picks parents and final code, `--parallel-per-gpu 4`); the only change is
 the code form. Every candidate except iter_00/candidate_A (START_CODE) pastes the block from
 `bt_lib.py` verbatim and runs the task as a tree (`Sequence`/`Fallback`/`Retry`/`Action`/`Condition`/`Do`,
-entry `run_tree(root)`). Each `Action` must have a check of its own effect: at least `joints_reached` for
-moves (joint space, avoids the robot-base frame offset), `gripper_is_open`, `gripper_holding` (threshold
-0.045 on `robot_joint_pos[-1]`: every passing held-out trial in earlier runs read >= 0.061 after the
-close, empty closes ~0.00-0.03). A failed check re-runs the action within the 4000-step / 160 s budget;
-no motion after the tree ends, so no "proceed anyway". Why: in evosearch_agent r1, 37/50 held-out
-trials carried an empty gripper to the stove after the grasp check failed twice, and r2 / disagreement r1
-lost 15 / 14 trials to moves that stopped ~14 cm short (`move_to_joints` gives up after 120 steps).
+entry `run_tree(root)`). Every `Action` needs a check of its own effect, written by the agent: the
+library has no checks, thresholds or task hints, only the nodes, the motion wrappers (`bt_move`,
+`bt_move_pose`, `bt_open`, `bt_close`, which refuse to run outside an Action) and the harness limits
+from the eval code (4000 sim steps, 180 s trial timeout). A failed check re-runs the action; no motion
+after the tree ends. The prompt carries no lessons from earlier runs (decided 11 Oct 2026: BT structure
+only), and tells the agent not to open EXPERIMENT.md / FINDINGS.md / TC1_NOTES.md / README.md.
 - Gates: `bt_check.py verify --iter-dir $RUN_DIR/iter_NN` OK before each eval; `bt_check.py report
-  --iter-dir ...` after each eval (which nodes fail) into findings.md; `report --logs <stage2 logs>` at the end.
+  --iter-dir ...` after each eval into findings.md; `report --logs <stage2 logs>` at the end.
 - `bt_lib.py` and `bt_check.py` are frozen during a run, like the skill library.
-- Compare with evosearch_agent r1 (same everything except the code form). Caveat: a BT can only retry
-  the strategy it has; if the grasp itself fails ~90% (as in evosearch_agent r1), checks turn silent
-  failures into early FAILURE but need a better grasp to pass.
+- Compare with evosearch_agent r1 (same everything except the code form).
+- Motivation (for the write-up, not the agent): in evosearch_agent r1, 37/50 held-out trials moved an
+  empty gripper to the stove after the grasp check failed twice; r2 / disagreement r1 lost 15 / 14
+  trials to moves that stopped ~14 cm short (`move_to_joints` gives up after 120 steps).
 - Run with `ARM=evosearch_bt REP=1` in Phase 3; (c)/(d) differences as for evosearch_agent, plus the
   bt_check gates above.
 

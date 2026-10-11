@@ -1,8 +1,8 @@
 # ===== BT_LIB BEGIN (paste verbatim from scripts/tc1/bt_lib.py; bt_check.py verifies) =====
-# Minimal behaviour tree for evosearch_bt candidates. Every Action has a check that tests the
-# action's effect from observations; a failed check re-runs the action (retries) within the
-# step and time budget. Motion only through bt_move / bt_open / bt_close, inside an Action.
-# Node functions take the blackboard dict `bb` (shared state: poses, masks, targets, ...).
+# Minimal behaviour tree for evosearch_bt candidates. Every Action has a check, written by the
+# candidate, that tests the action's effect; a failed check re-runs the action (retries) within the
+# step and time budget. Motion only through bt_move / bt_move_pose / bt_open / bt_close, inside an Action.
+# Node functions take the blackboard dict `bb` (shared state written and read by the nodes).
 import time as _bt_time
 
 import numpy as _bt_np
@@ -12,8 +12,6 @@ BT_STEP_BUDGET = 4000   # episode limit in sim steps (FrankaLiberoEnv max_steps)
 BT_TIME_BUDGET_S = 160  # evosearch_eval kills a trial at 180 s wall clock
 BT_MOVE_COST = 120      # max sim steps per move_to_joints call
 BT_GRIPPER_COST = 30    # sim steps per open_gripper / close_gripper call
-HOLD_MIN_WIDTH = 0.045  # robot_joint_pos[-1] after close: empty ~0.00-0.03, bowl held >= 0.06
-OPEN_MIN_WIDTH = 0.9    # robot_joint_pos[-1] when fully open (~0.99)
 _bt = {"steps": 0, "t0": _bt_time.time(), "action": None, "fails": []}
 
 
@@ -31,14 +29,14 @@ def _bt_need_action(fn):
 
 
 def bt_move(joints):
-    """One move_to_joints call (<=120 steps; may stop short of the target)."""
+    """One move_to_joints call, counted as BT_MOVE_COST steps."""
     _bt_need_action("bt_move")
     _bt["steps"] += BT_MOVE_COST
     move_to_joints(joints)
 
 
 def bt_move_pose(pos, quat):
-    """IK + one move. Returns the target joints, or None if IK failed (the Action then fails)."""
+    """solve_ik + one bt_move. Returns the target joints, or None if solve_ik returned None."""
     _bt_need_action("bt_move_pose")
     joints = solve_ik(_bt_np.asarray(pos, dtype=float).tolist(), _bt_np.asarray(quat, dtype=float).tolist())
     if joints is None:
@@ -59,32 +57,10 @@ def bt_close():
     close_gripper()
 
 
-# ---- standard checks (observation only) ----
-def joint_error(target):
-    q = _bt_np.asarray(get_observation()["robot_joint_pos"][:7], dtype=float)
-    return float(_bt_np.linalg.norm(q - _bt_np.asarray(target, dtype=float)))
-
-
-def joints_reached(target, tol=0.02):
-    return target is not None and joint_error(target) < tol
-
-
-def gripper_width():
-    return float(get_observation()["robot_joint_pos"][-1])
-
-
-def gripper_holding(min_width=HOLD_MIN_WIDTH):
-    return gripper_width() >= min_width
-
-
-def gripper_is_open(min_width=OPEN_MIN_WIDTH):
-    return gripper_width() >= min_width
-
-
 # ---- nodes ----
 class Action:
     """Run act(bb), then check(bb). Retry act while the check fails, up to `retries` extra tries.
-    act returning False means the try failed without checking (e.g. IK failed).
+    act returning False means the try failed without checking .
     cost = sim steps one try may use (budget guard); check is REQUIRED."""
 
     def __init__(self, name, act, check, retries=2, cost=BT_MOVE_COST):
@@ -143,7 +119,7 @@ class Fallback:
 
 
 class Retry:
-    """Re-tick a whole subtree (e.g. re-plan + re-grasp) up to `times` times."""
+    """Re-tick a whole subtree up to `times` times."""
 
     def __init__(self, name, child, times=2):
         self.name, self.child, self.times = name, child, times
