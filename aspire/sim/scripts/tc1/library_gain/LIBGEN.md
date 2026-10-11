@@ -2,12 +2,12 @@
 
 Measure the library alone, without debugging the tasks it is applied to:
 - **before**: K fresh programs per task, written zero-shot from library L0, run on fixed seeds.
-- **fix**: a fix loop on ONE chosen task promotes skills, giving library L1 (separate step, not here).
+- **fix**: a fix loop on ONE chosen task promotes skills, giving library L1 (`fix_prompt.md`).
 - **after**: K fresh programs for the other tasks from L1, same K, seeds, probe and codegen prompt.
 - **gain** = after minus before (mean success of one fresh program), on the other tasks only.
 - **noise**: a second "before" (`before_b`, same L0) shows how much the numbers move with no library change.
 
-Files: `libgen.py` (bookkeeping + eval), `libgen_codegen_prompt.md` (Claude session that writes the
+Files: `libgen.py` (bookkeeping + eval), `fix_prompt.md` (fix loop for one arm), `libgen_codegen_prompt.md` (Claude session that writes the
 programs, one subagent per program), `skills_snapshot.sh save-git` (L0 = library as committed).
 Defaults: `libero_goal_swap`, 10 tasks, K=4, seeds 1-10, probe seed 100, 4 workers on GPU 0.
 
@@ -45,6 +45,29 @@ bash scripts/tc1/common/skills_snapshot.sh check $SNAP                  # nothin
 ```
 Cost per phase (10 tasks): 40 codegen subagents; eval 400 trials, about 2 h at 4 workers
 (bench: 120 trials in 34 min) plus ~1 min warm-up per task.
+
+## Fix (one arm): L0 -> L1
+The fix loop writes to fixed paths (`outputs/libero_fix_loop*`, `outputs/working_codes`) and its
+promotion ledger refuses a second run on the same task, so park whatever is there first and move
+this arm's outputs into ROOT afterwards. Don't run a parent_selection job while an arm is parked.
+```bash
+ARM=rule  TASK=<chosen task>                                     # e.g. ARM=random / lowest for the other choices
+P=outputs/parked_$(date +%Y%m%d_%H%M%S) && mkdir -p $P
+for d in libero_fix_loop libero_fix_loop_debug libero_fix_loop_eval working_codes; do
+  [ -e outputs/$d ] && mv outputs/$d $P/; done
+bash scripts/tc1/common/skills_snapshot.sh restore L0_clean
+
+claude "$(sed -e "s|{{ARM}}|$ARM|g" -e "s|{{TASK}}|$TASK|g" scripts/tc1/library_gain/fix_prompt.md)"   # resume = same command
+# done when it reports L1_$ARM saved:
+bash scripts/tc1/common/skills_snapshot.sh check L1_$ARM
+
+mkdir -p $ROOT/fix_$ARM && for d in libero_fix_loop libero_fix_loop_debug working_codes; do
+  [ -e outputs/$d ] && mv outputs/$d $ROOT/fix_$ARM/; done
+echo "$TASK" > $ROOT/fix_$ARM/task.txt
+mv $P/* outputs/ && rmdir $P                                     # parent_selection outputs back in place
+```
+Then run the phase `after_$ARM` with `SNAP=L1_$ARM EXCL="--exclude $TASK"`.
+One fix loop: ~2-3 h (the parent_selection one took 2h15). No Stage 2: this task's held-out score isn't used.
 
 ## Gain
 ```bash
