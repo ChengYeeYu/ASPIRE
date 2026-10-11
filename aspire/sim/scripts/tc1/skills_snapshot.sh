@@ -3,6 +3,7 @@
 #   bash scripts/tc1/skills_snapshot.sh save    <name>   # copy .claude/libero/skills -> outputs/skill_snapshots/<name>
 #   bash scripts/tc1/skills_snapshot.sh restore <name>   # make .claude/libero/skills identical to the snapshot
 #   bash scripts/tc1/skills_snapshot.sh check   <name>   # exit 1 (and show the diff) if the library changed
+#   bash scripts/tc1/skills_snapshot.sh save-git <name> [rev]  # snapshot the library as committed at rev (default HEAD)
 # Tiny file ops -- fine on the head node. Run from ~/ASPIRE/aspire/sim.
 set -euo pipefail
 
@@ -19,6 +20,14 @@ case "$cmd" in
     cp -a "$skills/." "$snap/"
     (cd "$snap" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
     echo "saved $skills -> $snap ($(wc -l < "$snap/SHA256SUMS") files)"
+    ;;
+  save-git)
+    rev="${3:-HEAD}"
+    [[ -e "$snap" ]] && { echo "snapshot exists, refusing to overwrite: $snap"; exit 1; }
+    mkdir -p "$snap"
+    git -C "$(git rev-parse --show-toplevel)" archive "$rev:$(git rev-parse --show-prefix)$skills" | tar -x -C "$snap"   # -C: archive from a subdir only sees the subdir
+    (cd "$snap" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+    echo "saved $skills @ $(git rev-parse --short "$rev") -> $snap ($(wc -l < "$snap/SHA256SUMS") files)"
     ;;
   restore)
     [[ -f "$snap/SHA256SUMS" ]] || { echo "no snapshot: $snap"; exit 1; }
