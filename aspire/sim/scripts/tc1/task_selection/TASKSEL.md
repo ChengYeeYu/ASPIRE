@@ -67,6 +67,27 @@ Restoring `TS_L0_empty` deletes the committed skill files from the working tree 
 deleted). This is expected. `bash scripts/tc1/common/skills_snapshot.sh restore L0_clean` (or
 `git checkout -- .claude/libero/skills`) brings them back after the experiment.
 
+## Unattended (auto_job.sh + auto.py)
+`auto.py` does the `next` loop itself: shell steps as above, eval in the foreground, and the Claude
+steps (codegen, fix loop, disagreement selection) as `claude -p --model claude-sonnet-5
+--permission-mode auto` with the same prompt files plus a RUN_MODE note appended (headless
+mechanics only: foreground subagents, never end the turn while something runs). The prompt files are
+unchanged, so `codegen_prompt_sha` matches the manual phases.
+```bash
+# head node, ~/ASPIRE/aspire/sim, after the other arm is done (auto.py refuses otherwise)
+.venv/bin/python3 scripts/tc1/task_selection/auto.py --arm disagreement --dry-run   # what it would run now
+ARM=disagreement sbatch scripts/tc1/task_selection/auto_job.sh
+```
+- The job submits its own successor (`--dependency=afterany`), so a 6 h TIMEOUT just continues
+  in the next job; every step resumes. auto.py starts no step with < 20 min left (exit 10).
+- On done (exit 0) or error (exit 2, reason in `auto/FAILED`) the successor is cancelled.
+  After fixing an error: `rm outputs/task_selection/<arm>/auto/FAILED` and sbatch again.
+- Stop: `touch outputs/task_selection/<arm>/auto/STOP` (at the next step boundary) or `scancel`.
+- Watch: `tail -f outputs/task_selection/<arm>/auto/auto.log`; each Claude/eval run logs to
+  `auto/<time>_<step>.log`; `auto/jobs.log` lists the jobs. Max 10 jobs per chain (`AUTO_MAX_JOBS`).
+- A Claude run that ends without advancing its step is retried, at most 3 times per step per job.
+- Deviation to note in the write-up: this arm's Claude steps ran headless with RUN_MODE appended.
+
 ## Report
 ```bash
 .venv/bin/python3 scripts/tc1/task_selection/tsel.py report          # both arms; writes ROOT/<arm>/report.json
